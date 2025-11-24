@@ -1,67 +1,149 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from "@tanstack/react-router";
+import { json } from "@tanstack/react-start";
+import {
+	checkRateLimit,
+	getClientId,
+	sanitizeResponse,
+	validateDownloadRequest,
+} from "@/middleware/security";
+import { downloadService } from "@/services/unified-download.service";
 
-export const Route = createFileRoute('/api/download')({
-  POST: async ({ request }) => {
-    try {
-      const { url } = await request.json()
+export const Route = createFileRoute("/api/download")({
+	server: {
+		handlers: {
+			POST: async ({ request }: { request: Request }) => {
+				try {
+					const clientId = getClientId(request);
 
-      if (!url) {
-        return Response.json({ error: 'URL is required' }, { status: 400 })
-      }
+					// Rate limiting check
+					const rateLimitCheck = checkRateLimit(clientId);
+					if (!rateLimitCheck.allowed) {
+						const resetTime = rateLimitCheck.resetTime;
+						const resetInMinutes = Math.ceil(
+							((resetTime || Date.now() + 60000) - Date.now()) / 60000,
+						);
 
-      // Detect platform
-      let platform: 'instagram' | 'twitter' | 'tiktok' | null
-      if (url.includes('instagram.com')) {
-        platform = 'instagram'
-      } else if (url.includes('x.com') || url.includes('twitter.com')) {
-        platform = 'twitter'
-      } else if (url.includes('tiktok.com')) {
-        platform = 'tiktok'
-      } else {
-        return Response.json({ error: 'Unsupported platform' }, { status: 400 })
-      }
+						return json(
+							{
+								success: false,
+								error: `Rate limit exceeded. Please try again in ${resetInMinutes} minute${resetInMinutes > 1 ? "s" : ""}.`,
+							},
+							{
+								status: 429,
+								headers: {
+									"X-RateLimit-Limit": "10",
+									"X-RateLimit-Remaining": "0",
+									"X-RateLimit-Reset": resetTime?.toString(),
+									"Retry-After": resetInMinutes.toString(),
+								},
+							},
+						);
+					}
 
-      // Extract IDs
-      let id: string | null = null
-      if (platform === 'instagram') {
-        const match = url.match(/instagram\.com\/(?:reel|p|tv)\/([A-Za-z0-9_-]+)/)
-        id = match ? match[1] : null
-      } else if (platform === 'twitter') {
-        const match = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/)
-        id = match ? match[1] : null
-      } else if (platform === 'tiktok') {
-        const match = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/)
-        id = match ? match[1] : null
-      }
+					// Get request data
+					let requestBody: { url?: string };
+					try {
+						requestBody = await request.json();
+					} catch (parseError) {
+						console.error("Failed to parse request body:", parseError);
+						return json(
+							{ success: false, error: "Invalid JSON in request body" },
+							{ status: 400 },
+						);
+					}
 
-      if (!id) {
-        return Response.json({ error: 'Invalid URL format' }, { status: 400 })
-      }
+					const { url } = requestBody;
 
-      // For now, return mock data
-      // In a real implementation, you would call the actual download service here
-      const mockResults = [
-        {
-          id: Date.now().toString(),
-          type: platform === 'instagram' ? 'video' : 'video',
-          url: url,
-          thumbnail: `https://via.placeholder.com/400x300?text=${platform}`,
-          downloadUrl: url,
-          title: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Content`,
-          size: '2.4 MB',
-          platform: platform
-        }
-      ]
+					if (!url || typeof url !== "string") {
+						return json(
+							{
+								success: false,
+								error: url ? "URL must be a string" : "URL is required",
+								received: typeof url,
+							},
+							{ status: 400 },
+						);
+					}
 
-      await new Promise(resolve => setTimeout(resolve, 2000)) // Simulate processing time
+					// Security validation
+					const validation = validateDownloadRequest(
+						url,
+						request.headers.get("user-agent") || undefined,
+					);
 
-      return Response.json({ success: true, results: mockResults })
-    } catch (error) {
-      console.error('Download API error:', error)
-      return Response.json(
-        { error: 'Failed to process download request' },
-        { status: 500 }
-      )
-    }
-  }
-})
+					if (!validation.valid) {
+						return json(
+							{
+								success: false,
+								error: validation.error || "Invalid request",
+							},
+							{ status: 400 },
+						);
+					}
+
+					// Use the unified download service
+					const response = await downloadService.download(url.trim());
+
+					if (!response.success) {
+						return json(
+							{
+								success: false,
+								error: response.error || "Failed to process download request",
+								platform: response.platform,
+							},
+							{
+								status: response.error?.includes("Unsupported") ? 400 : 500,
+							},
+						);
+					}
+
+					// Sanitize response data
+					const sanitizedResults = sanitizeResponse(
+						response.results || [],
+						response.platform || "instagram",
+					);
+
+					return json(
+						{
+							success: true,
+							results: sanitizedResults,
+							platform: response.platform,
+						},
+						{
+							headers: {
+								"X-RateLimit-Limit": "10",
+								"X-RateLimit-Remaining": (10 - rateLimitCheck.count).toString(),
+								"X-RateLimit-Reset": rateLimitCheck.resetTime?.toString(),
+							},
+						},
+					);
+				} catch (error) {
+					console.error("Download API error:", {
+						error: error instanceof Error ? error.message : "Unknown error",
+						stack: error instanceof Error ? error.stack : "No stack trace",
+						timestamp: new Date().toISOString(),
+						clientId: getClientId(request),
+					});
+
+					const _errorMessage =
+						error instanceof Error
+							? error.message
+							: "Failed to process download request";
+
+					return json(
+						{
+							success: false,
+							error: "An unexpected error occurred. Please try again later.",
+						},
+						{
+							status: 500,
+							headers: {
+								"X-Error-ID": Math.random().toString(36).substr(2, 9), // For debugging
+							},
+						},
+					);
+				}
+			},
+		},
+	},
+});

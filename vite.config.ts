@@ -14,6 +14,31 @@ const config = defineConfig({
     tanstackStart(),
     viteReact(),
   ],
+  build: {
+    rollupOptions: {
+      external: [
+        'puppeteer-extra',
+        'puppeteer-extra-plugin-stealth',
+        'puppeteer',
+        'crawlee',
+        '@crawlee/browser-pool',
+        'playwright',
+        'playwright-extra',
+      ],
+    },
+  },
+  ssr: {
+    noExternal: ['lucide-react', 'framer-motion'],
+    external: [
+      'puppeteer-extra',
+      'puppeteer-extra-plugin-stealth',
+      'puppeteer',
+      'crawlee',
+      '@crawlee/browser-pool',
+      'playwright',
+      'playwright-extra',
+    ],
+  },
 })
 
 export default config
