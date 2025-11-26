@@ -1,6 +1,11 @@
-import { InstagramDownloader } from "@/lib/native-downloaders/instagram";
+import { RobustInstagramDownloader } from "@/lib/native-downloaders/instagram";
 import { TikTokDownloader } from "@/lib/native-downloaders/tiktok";
 import { TwitterDownloader } from "@/lib/native-downloaders/twitter";
+
+// Import Crawlee downloaders as fallback
+import { InstagramCrawleeDownloader } from "@/lib/crawlee-downloaders/instagram-crawlee-downloader";
+import { TikTokCrawleeDownloader } from "@/lib/crawlee-downloaders/tiktok-crawlee-downloader";
+import { TwitterCrawleeDownloader } from "@/lib/crawlee-downloaders/twitter-crawlee-downloader";
 import type { DownloadResult, SupportedPlatform } from "@/types/download";
 
 /**
@@ -27,7 +32,7 @@ export interface PlatformAdapter {
 }
 
 /**
- * Base adapter with common functionality
+ * Base adapter with common functionality and fallback mechanism
  */
 abstract class BasePlatformAdapter implements PlatformAdapter {
 	abstract readonly platform: SupportedPlatform;
@@ -70,6 +75,128 @@ abstract class BasePlatformAdapter implements PlatformAdapter {
 		return `https://via.placeholder.com/400x300/1a1a2e/16213e?text=${this.name.toUpperCase()}+Content`;
 	}
 
+	/**
+	 * Execute download with fallback to Crawlee
+	 */
+	protected async executeDownloadWithFallback(
+		nativeDownload: () => Promise<DownloadResult[]>,
+		crawleeDownload: () => Promise<DownloadResult[]>,
+		url: string,
+	): Promise<DownloadResult[]> {
+		console.log(`[${this.platform}] Trying native downloader first...`);
+
+		try {
+			// Try native downloader first
+			const nativeResults = await nativeDownload();
+			console.log(
+				`[${this.platform}] ✅ Native downloader succeeded with ${nativeResults.length} results`,
+			);
+			return nativeResults;
+		} catch (nativeError) {
+			console.warn(
+				`[${this.platform}] ⚠️ Native downloader failed:`,
+				nativeError instanceof Error ? nativeError.message : nativeError,
+			);
+
+			// Check if the error suggests Crawlee might succeed
+			const shouldTryCrawlee = this.shouldTryCrawlee(nativeError);
+
+			if (!shouldTryCrawlee) {
+				throw new Error(
+					`Native downloader failed and fallback is not recommended: ${nativeError instanceof Error ? nativeError.message : "Unknown error"}`,
+				);
+			}
+
+			console.log(
+				`[${this.platform}] 🔄 Fallback: Trying Crawlee downloader...`,
+			);
+
+			try {
+				const crawleeResults = await crawleeDownload();
+				console.log(
+					`[${this.platform}] ✅ Crawlee fallback succeeded with ${crawleeResults.length} results`,
+				);
+				return crawleeResults.map((result) => ({
+					...result,
+					isFallback: true, // Mark results as coming from fallback
+				}));
+			} catch (crawleeError) {
+				console.error(
+					`[${this.platform}] ❌ Both native and Crawlee downloaders failed:`,
+				);
+				console.error(
+					`  Native error:`,
+					nativeError instanceof Error ? nativeError.message : nativeError,
+				);
+				console.error(
+					`  Crawlee error:`,
+					crawleeError instanceof Error ? crawleeError.message : crawleeError,
+				);
+
+				throw new Error(
+					`Both downloaders failed. Native: ${nativeError instanceof Error ? nativeError.message : "Unknown error"}. Crawlee: ${crawleeError instanceof Error ? crawleeError.message : "Unknown error"}`,
+				);
+			}
+		}
+	}
+
+	/**
+	 * Determine if Crawlee fallback should be attempted based on the native error
+	 */
+	private shouldTryCrawlee(error: unknown): boolean {
+		if (!error) return false;
+
+		const errorMessage =
+			error instanceof Error
+				? error.message.toLowerCase()
+				: String(error).toLowerCase();
+
+		// Don't try Crawlee for these types of errors
+		const noFallbackPatterns = [
+			"invalid url",
+			"not supported",
+			"not found",
+			"404",
+			"private",
+			"deleted",
+			"access denied",
+			"forbidden",
+		];
+
+		const shouldNotFallback = noFallbackPatterns.some((pattern) =>
+			errorMessage.includes(pattern),
+		);
+
+		if (shouldNotFallback) {
+			console.log(
+				`[${this.platform}] Skipping Crawlee fallback due to error: ${errorMessage}`,
+			);
+			return false;
+		}
+
+		// Try Crawlee for these types of errors
+		const fallbackPatterns = [
+			"network",
+			"timeout",
+			"cors",
+			"rate limit",
+			"blocked",
+			"scraper",
+			"bot detected",
+			"api limit",
+			"server error",
+			"502",
+			"503",
+			"504",
+		];
+
+		const shouldFallback = fallbackPatterns.some((pattern) =>
+			errorMessage.includes(pattern),
+		);
+
+		return shouldFallback || errorMessage.length > 10; // Default to trying for unknown errors
+	}
+
 	abstract canHandle(url: string): boolean;
 	abstract download(url: string): Promise<DownloadResult[]>;
 	abstract extractId(url: string): string | null;
@@ -88,7 +215,8 @@ export class InstagramAdapter extends BasePlatformAdapter {
 		/\/tv\/([A-Za-z0-9_-]+)/i,
 	];
 
-	private downloader = new InstagramDownloader();
+	private nativeDownloader = new InstagramDownloader();
+	private crawleeDownloader = new InstagramCrawleeDownloader();
 
 	canHandle(url: string): boolean {
 		return url.toLowerCase().includes("instagram.com");
@@ -99,14 +227,11 @@ export class InstagramAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		try {
-			return await this.downloader.download(url);
-		} catch (error) {
-			console.error("Instagram download error:", error);
-			throw new Error(
-				`Failed to download Instagram content: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
-		}
+		return this.executeDownloadWithFallback(
+			() => this.nativeDownloader.download(url),
+			() => this.crawleeDownloader.download(url),
+			url,
+		);
 	}
 }
 
@@ -119,7 +244,8 @@ export class TwitterAdapter extends BasePlatformAdapter {
 
 	private readonly patterns = [/\/status\/(\d+)/i];
 
-	private downloader = new TwitterDownloader();
+	private nativeDownloader = new TwitterDownloader();
+	private crawleeDownloader = new TwitterCrawleeDownloader();
 
 	canHandle(url: string): boolean {
 		const normalizedUrl = url.toLowerCase();
@@ -133,14 +259,11 @@ export class TwitterAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		try {
-			return await this.downloader.download(url);
-		} catch (error) {
-			console.error("Twitter download error:", error);
-			throw new Error(
-				`Failed to download Twitter content: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
-		}
+		return this.executeDownloadWithFallback(
+			() => this.nativeDownloader.download(url),
+			() => this.crawleeDownloader.download(url),
+			url,
+		);
 	}
 }
 
@@ -153,7 +276,8 @@ export class TikTokAdapter extends BasePlatformAdapter {
 
 	private readonly patterns = [/\/video\/(\d+)/i, /\/@[^/]+\/video\/(\d+)/i];
 
-	private downloader = new TikTokDownloader();
+	private nativeDownloader = new TikTokDownloader();
+	private crawleeDownloader = new TikTokCrawleeDownloader();
 
 	canHandle(url: string): boolean {
 		return url.toLowerCase().includes("tiktok.com");
@@ -164,13 +288,10 @@ export class TikTokAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		try {
-			return await this.downloader.download(url);
-		} catch (error) {
-			console.error("TikTok download error:", error);
-			throw new Error(
-				`Failed to download TikTok content: ${error instanceof Error ? error.message : "Unknown error"}`,
-			);
-		}
+		return this.executeDownloadWithFallback(
+			() => this.nativeDownloader.download(url),
+			() => this.crawleeDownloader.download(url),
+			url,
+		);
 	}
 }

@@ -24,6 +24,9 @@ pnpm check          # Run both linting and formatting checks
 
 # Add shadcn/ui components
 pnpx shadcn@latest add <component-name>
+
+# Install dependencies
+pnpm install
 ```
 
 ## Architecture Overview
@@ -38,7 +41,7 @@ The application uses a plugin-based architecture for platform support:
 - **Base Interface**: `src/lib/adapters/platform-adapter.ts` defines the `PlatformAdapter` abstract class
 - **Platform Implementations**: Each platform (Instagram, Twitter, TikTok) has its own adapter in `src/lib/adapters/`
 - **Adapter Registry**: `src/lib/adapters/adapter-registry.ts` manages adapter lifecycle and provides discovery using a singleton pattern
-- **Native Downloaders**: Each adapter wraps platform-specific native downloaders in `src/lib/native-downloaders/`
+- **Native Downloaders**: Each adapter wraps platform-specific native downloaders in `src/lib/native-downloaders/` with sophisticated multi-strategy approaches
 
 #### 2. Unified Download Service
 All download operations go through the `UnifiedDownloadService` (`src/services/unified-download.service.ts`):
@@ -136,11 +139,12 @@ src/
 
 ### Development Environment Configuration
 
-- **Package Manager**: Uses `pnpm` with version 10.23.0+ (defined in packageManager field)
+- **Package Manager**: Uses `pnpm` (scripts defined in package.json)
 - **Code Quality**: Biome for linting and formatting with tab indentation and double quotes
 - **Vite Configuration**: TanStack Start plugin with React and Tailwind CSS integration
 - **Path Aliases**: Configured through `vite-tsconfig-paths` for clean imports
 - **Build Tools**: Vite with React plugin for fast development and optimized builds
+- **Testing Framework**: Vitest with Testing Library integration (configured but no tests yet)
 
 ### Security Considerations
 
@@ -167,6 +171,7 @@ src/
 3. **API Integration**: All external API calls go through the unified download service
 4. **Code Quality**: Run `pnpm check` before commits to ensure linting and formatting
 5. **Testing**: Vitest is configured with Testing Library but currently has no tests - this is a priority
+6. **Package Management**: The project uses pnpm for dependency management
 
 ### Known Issues & Technical Debt
 

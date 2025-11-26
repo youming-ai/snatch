@@ -39,7 +39,6 @@ interface TwitterResponse {
  */
 export class TwitterDownloader {
 	private readonly TWITTER_GRAPHQL = "https://twitter.com/i/api/graphql";
-
 	constructor() {
 		// Using fallback method only (Crawlee requires server-side environment)
 	}
@@ -49,7 +48,6 @@ export class TwitterDownloader {
 	 */
 	private async extractTweetInfo(url: string): Promise<TweetData> {
 		try {
-			console.log("🔍 [Twitter] Analyzing URL:", url);
 			const tweetId = this.extractTweetId(url);
 			console.log("🔍 [Twitter] Extracted Tweet ID:", tweetId);
 
@@ -86,7 +84,6 @@ export class TwitterDownloader {
 
 				if (response.ok) {
 					const data = await response.json();
-					console.log("✅ [Twitter] GraphQL API response:", data);
 
 					if (data?.data?.tweet_result?.result) {
 						const parsedData = this.parseTwitterResponse(
@@ -532,10 +529,16 @@ export class TwitterDownloader {
 	/**
 	 * Download Twitter/X content using Crawlee
 	 */
+
+	/**
+	 * Download Twitter/X content using Crawlee
+	 */
 	async download(url: string): Promise<DownloadResult[]> {
 		try {
 			console.log(`🔄 [Twitter] Starting download for:`, url);
 
+			// Fallback to legacy method
+			console.log("🔄 [Fallback] Using legacy Twitter download method...");
 			const tweetData = await this.extractTweetInfo(url);
 
 			if (!tweetData.success || !tweetData.data) {
@@ -543,7 +546,7 @@ export class TwitterDownloader {
 			}
 
 			const results = this.createDownloadResult(tweetData.data, url);
-			console.log(`✅ [Twitter] Download completed. Results:`, results.length);
+			console.log(`✅ [Fallback] Download completed. Results:`, results.length);
 			return results;
 		} catch (error) {
 			console.error("❌ [Twitter] Download error:", error);

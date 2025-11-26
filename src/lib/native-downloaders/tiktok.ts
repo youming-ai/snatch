@@ -36,7 +36,6 @@ interface TikTokItemStruct {
 export class TikTokDownloader {
 	private readonly TIKTOK_API_BASE =
 		"https://api16-normal-c-useast1a.tiktokv.com/aweme/v1/feed";
-
 	constructor() {
 		// Using web scraping method only (API is blocked)
 	}
@@ -46,14 +45,11 @@ export class TikTokDownloader {
 	 */
 	private async extractVideoInfo(url: string): Promise<TikTokVideoData> {
 		try {
-			console.log("🔍 [TikTok] Analyzing URL:", url);
 			const videoId = this.extractVideoId(url);
-			console.log("🔍 [TikTok] Extracted Video ID:", videoId);
 
 			// Method 1: Try TikTok's internal API
 			try {
 				const apiUrl = `${this.TIKTOK_API_BASE}/${videoId}`;
-				console.log("🔍 [TikTok] Attempting TikTok API...");
 
 				const response = await this.fetchWithHeaders(apiUrl, {
 					"User-Agent":
@@ -66,7 +62,6 @@ export class TikTokDownloader {
 
 				if (response.ok) {
 					const data = await response.json();
-					console.log("✅ [TikTok] API response:", data);
 
 					// Try different response formats TikTok might use
 					if (data?.statusCode === 0 && data?.itemStruct) {
@@ -93,16 +88,15 @@ export class TikTokDownloader {
 			}
 
 			// Method 2: Try web scraping with proper headers
-			console.log("🔍 [TikTok] Trying web scraping approach...");
+
 			const webData = await this.extractFromWebPage(url);
 
 			if (webData.success) {
-				console.log("✅ [TikTok] Web scraping successful");
 				return webData;
 			}
 
 			// Method 3: Fallback to mock data with real URL info
-			console.log("⚠️ [TikTok] Using mock data with real URL");
+
 			return this.getMockDataWithRealUrl(url);
 		} catch (error) {
 			console.error("❌ [TikTok] All extraction methods failed:", error);
@@ -349,10 +343,13 @@ export class TikTokDownloader {
 	/**
 	 * Download TikTok content using Crawlee
 	 */
+
+	/**
+	 * Download TikTok content using Crawlee
+	 */
 	async download(url: string): Promise<DownloadResult[]> {
 		try {
-			console.log(`🔄 [TikTok] Starting download for:`, url);
-
+			// Fallback to legacy method
 			const videoData = await this.extractVideoInfo(url);
 
 			if (!videoData.success || !videoData.data) {
@@ -360,7 +357,7 @@ export class TikTokDownloader {
 			}
 
 			const results = this.createDownloadResult(videoData.data, url);
-			console.log(`✅ [TikTok] Download completed. Results:`, results.length);
+
 			return results;
 		} catch (error) {
 			console.error("❌ [TikTok] Download error:", error);
@@ -371,13 +368,12 @@ export class TikTokDownloader {
 			);
 		}
 	}
+
 	/**
 	 * Extract TikTok information from web page
 	 */
 	private async extractFromWebPage(url: string): Promise<TikTokVideoData> {
 		try {
-			console.log("🔍 [TikTok] Fetching TikTok page...");
-
 			const response = await this.fetchWithHeaders(url, {
 				"User-Agent":
 					"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -392,10 +388,6 @@ export class TikTokDownloader {
 			}
 
 			const html = await response.text();
-			console.log(
-				"🔍 [TikTok] Page fetched successfully, length:",
-				html.length,
-			);
 
 			// Try to find __UNIVERSAL_DATA_FOR_REHYDRATION__
 			const universalMatch = html.match(

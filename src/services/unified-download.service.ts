@@ -55,19 +55,36 @@ export class UnifiedDownloadService {
 			}
 
 			// Step 3: Execute download with timeout
+			const downloadStartTime = Date.now();
 			const results = await this.executeWithTimeout(
 				() => adapter.download(url),
 				30000, // 30 second timeout
 				`Download timeout for ${validation.platform}`,
 			);
+			const downloadDuration = Date.now() - downloadStartTime;
 
 			// Step 4: Validate and sanitize results
 			const sanitizedResults = this.sanitizeResults(results);
+
+			// Step 5: Check for fallback results and provide user feedback
+			const hasFallbackResults = sanitizedResults.some(
+				(result) => result.isFallback,
+			);
+			if (hasFallbackResults) {
+				console.log(
+					`[Fallback] ${validation.platform} download completed with Crawlee fallback in ${downloadDuration}ms`,
+				);
+			} else {
+				console.log(
+					`[Native] ${validation.platform} download completed successfully in ${downloadDuration}ms`,
+				);
+			}
 
 			return {
 				success: true,
 				results: sanitizedResults,
 				platform: validation.platform,
+				processingTime: downloadDuration,
 			};
 		} catch (error) {
 			return this.handleError(error, url);
@@ -124,6 +141,7 @@ export class UnifiedDownloadService {
 				thumbnail:
 					result.thumbnail || this.generateFallbackThumbnail(result.platform),
 				isMock: result.isMock,
+				isFallback: result.isFallback || false, // Ensure isFallback is boolean
 			}));
 	}
 

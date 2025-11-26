@@ -15,6 +15,7 @@ export interface DownloadResult {
 	platform: SupportedPlatform;
 	quality?: "hd" | "sd" | "audio";
 	isMock?: boolean;
+	isFallback?: boolean; // Indicates if result came from fallback (Crawlee) downloader
 	metadata?: DownloadMetadata;
 }
 
