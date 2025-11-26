@@ -86,7 +86,22 @@ export class InstagramDownloader {
 				);
 			}
 
-			// Strategy 2: Try alternative API endpoints
+			// Strategy 2: Try GraphQL API (inspired by Okramjimmy/Instagram-reels-downloader)
+			try {
+				console.log("🔍 [Instagram] Trying GraphQL API...");
+				const graphqlData = await this.extractFromGraphQL(shortcode);
+				if (graphqlData.success) {
+					console.log("✅ [Instagram] GraphQL API successful");
+					return graphqlData;
+				}
+			} catch (graphqlError) {
+				console.warn(
+					"❌ [Instagram] GraphQL API failed:",
+					graphqlError instanceof Error ? graphqlError.message : "Unknown error",
+				);
+			}
+
+			// Strategy 3: Try alternative API endpoints
 			try {
 				console.log("🔍 [Instagram] Trying alternative APIs...");
 				const altApiData = await this.extractFromAlternativeAPIs(shortcode);
@@ -445,6 +460,103 @@ export class InstagramDownloader {
 		} catch (error) {
 			throw new Error(
 				`Failed to parse media data: ${error instanceof Error ? error.message : "Unknown error"}`,
+			);
+		}
+	}
+
+	/**
+ * Extract using GraphQL API (inspired by Okramjimmy/Instagram-reels-downloader)
+ */
+	private async extractFromGraphQL(
+		shortcode: string,
+	): Promise<InstagramMediaData> {
+		try {
+			// Payload from reference implementation
+			const requestData = {
+				av: "0",
+				__d: "www",
+				__user: "0",
+				__a: "1",
+				__req: "3",
+				__hs: "19624.HYP:instagram_web_pkg.2.1..0.0",
+				dpr: "3",
+				__ccg: "UNKNOWN",
+				__rev: "1008824440",
+				__s: "xf44ne:zhh75g:xr51e7",
+				__hsi: "7282217488877343271",
+				__dyn:
+					"7xeUmwlEnwn8K2WnFw9-2i5U4e0yoW3q32360CEbo1nEhw2nVE4W0om78b87C0yE5ufz81s8hwGwQwoEcE7O2l0Fwqo31w9a9x-0z8-U2zxe2GewGwso88cobEaU2eUlwhEe87q7-0iK2S3qazo7u1xwIw8O321LwTwKG1pg661pwr86C1mwraCg",
+				__csr:
+					"gZ3yFmJkillQvV6ybimnG8AmhqujGbLADgjyEOWz49z9XDlAXBJpC7Wy-vQTSvUGWGh5u8KibG44dBiigrgjDxGjU0150Q0848azk48N09C02IR0go4SaR70r8owyg9pU0V23hwiA0LQczA48S0f-x-27o05NG0fkw",
+				__comet_req: "7",
+				lsd: "AVqbxe3J_YA",
+				jazoest: "2957",
+				__spin_r: "1008824440",
+				__spin_b: "trunk",
+				__spin_t: "1695523385",
+				fb_api_caller_class: "RelayModern",
+				fb_api_req_friendly_name: "PolarisPostActionLoadPostQueryQuery",
+				variables: JSON.stringify({
+					shortcode: shortcode,
+					fetch_comment_count: "null",
+					fetch_related_profile_media_count: "null",
+					parent_comment_count: "null",
+					child_comment_count: "null",
+					fetch_like_count: "null",
+					fetch_tagged_user_count: "null",
+					fetch_preview_comment_count: "null",
+					has_threaded_comments: "false",
+					hoisted_comment_id: "null",
+					hoisted_reply_id: "null",
+				}),
+				server_timestamps: "true",
+				doc_id: "10015901848480474",
+			};
+
+			const body = new URLSearchParams(requestData as any);
+
+			const response = await this.fetchWithAdvancedHeaders(
+				"https://www.instagram.com/api/graphql",
+				{
+					Accept: "*/*",
+					"Accept-Language": "en-US,en;q=0.5",
+					"Content-Type": "application/x-www-form-urlencoded",
+					"X-FB-Friendly-Name": "PolarisPostActionLoadPostQueryQuery",
+					"X-CSRFToken": "RVDUooU5MYsBbS1CNN3CzVAuEP8oHB52",
+					"X-IG-App-ID": "1217981644879628",
+					"X-FB-LSD": "AVqbxe3J_YA",
+					"X-ASBD-ID": "129477",
+					"Sec-Fetch-Dest": "empty",
+					"Sec-Fetch-Mode": "cors",
+					"Sec-Fetch-Site": "same-origin",
+					"User-Agent":
+						"Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile Safari/537.36",
+				},
+				{
+					method: "POST",
+					body: body,
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error(
+					`GraphQL request failed with status: ${response.status} ${response.statusText}`,
+				);
+			}
+
+			const json = await response.json();
+
+			if (json.data?.xdt_shortcode_media) {
+				return this.parseMediaData(
+					json.data.xdt_shortcode_media,
+					`https://www.instagram.com/p/${shortcode}/`,
+				);
+			}
+
+			throw new Error("No media data found in GraphQL response");
+		} catch (error) {
+			throw new Error(
+				`GraphQL extraction failed: ${error instanceof Error ? error.message : "Unknown error"}`,
 			);
 		}
 	}
@@ -810,7 +922,7 @@ export class InstagramDownloader {
 			if (!mediaData.success) {
 				throw new Error(
 					mediaData.error ||
-						"No downloadable content found on this Instagram page",
+					"No downloadable content found on this Instagram page",
 				);
 			}
 
