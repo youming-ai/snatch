@@ -80,8 +80,12 @@ export class ErrorBoundary extends Component<
 	}
 
 	private getDisplayName(): string {
-		const component = this.props.children as any;
-		return component?.type?.displayName || component?.type?.name || "Unknown";
+		const component = this.props.children as React.ReactElement<{ type?: { displayName?: string; name?: string } }> | null;
+		if (component && typeof component === 'object' && 'type' in component) {
+			const componentType = component.type as { displayName?: string; name?: string } | undefined;
+			return componentType?.displayName || componentType?.name || "Unknown";
+		}
+		return "Unknown";
 	}
 
 	private handleRetry = () => {

@@ -97,7 +97,9 @@ export class InstagramDownloader {
 			} catch (graphqlError) {
 				console.warn(
 					"❌ [Instagram] GraphQL API failed:",
-					graphqlError instanceof Error ? graphqlError.message : "Unknown error",
+					graphqlError instanceof Error
+						? graphqlError.message
+						: "Unknown error",
 				);
 			}
 
@@ -465,8 +467,8 @@ export class InstagramDownloader {
 	}
 
 	/**
- * Extract using GraphQL API (inspired by Okramjimmy/Instagram-reels-downloader)
- */
+	 * Extract using GraphQL API (inspired by Okramjimmy/Instagram-reels-downloader)
+	 */
 	private async extractFromGraphQL(
 		shortcode: string,
 	): Promise<InstagramMediaData> {
@@ -922,7 +924,7 @@ export class InstagramDownloader {
 			if (!mediaData.success) {
 				throw new Error(
 					mediaData.error ||
-					"No downloadable content found on this Instagram page",
+						"No downloadable content found on this Instagram page",
 				);
 			}
 

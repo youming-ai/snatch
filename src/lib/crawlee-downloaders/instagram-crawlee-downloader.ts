@@ -1,9 +1,9 @@
 import type { DownloadResult } from "@/types/download";
 import {
+	CrawleeError,
+	CrawleeErrorType,
 	EnhancedCrawleeDownloader,
 	type EnhancedCrawleeOptions,
-	CrawleeErrorType,
-	CrawleeError,
 	type ExtractedData,
 } from "../enhanced-crawlee-downloader";
 

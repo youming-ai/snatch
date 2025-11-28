@@ -5,9 +5,9 @@ const isNodeJs =
 	typeof window === "undefined" && typeof process !== "undefined";
 
 // Type definitions for Crawlee (will be imported dynamically)
-type PuppeteerCrawler = any;
-type CheerioCrawler = any;
-type Dataset = any;
+type PuppeteerCrawler = unknown;
+type CheerioCrawler = unknown;
+type Dataset = unknown;
 
 interface CrawleeOptions {
 	/**
@@ -43,7 +43,7 @@ interface ExtractedData {
 		comments?: number;
 		views?: number;
 	};
-	metadata?: Record<string, any>;
+	metadata?: Record<string, unknown>;
 }
 
 /**
@@ -73,7 +73,7 @@ export abstract class CrawleeDownloader {
 	/**
 	 * Create a crawler instance with platform-specific configuration
 	 */
-	protected async createCrawler(options: CrawleeOptions): Promise<any> {
+	protected async createCrawler(options: CrawleeOptions): Promise<unknown> {
 		const defaultOptions = {
 			maxRequestsPerCrawl: 1,
 			headless: true,
@@ -91,7 +91,7 @@ export abstract class CrawleeDownloader {
 	 */
 	protected async createPuppeteerCrawler(
 		options: CrawleeOptions,
-	): Promise<any> {
+	): Promise<unknown> {
 		// If we're not in Node.js, return a mock crawler
 		if (!isNodeJs) {
 			return this.createMockCrawler();

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { errorReporter, reportError } from "./ErrorReporter";
+import { reportError } from "./ErrorReporter";
 
 export interface ErrorHandlerOptions {
 	context?: Record<string, unknown>;
@@ -80,7 +80,7 @@ export function useAsyncErrorHandler(options: ErrorHandlerOptions = {}) {
 	const { handleError } = useErrorHandler(options);
 
 	const wrapAsync = useCallback(
-		<T extends (...args: any[]) => Promise<any>>(
+		<T extends (...args: unknown[]) => Promise<unknown>>(
 			asyncFn: T,
 			context?: Record<string, unknown>,
 		): T => {
@@ -182,7 +182,7 @@ export function useErrorBoundary() {
 		setError(null);
 	}, []);
 
-	const captureError = useCallback((error: Error, errorInfo?: any) => {
+	const captureError = useCallback((error: Error, errorInfo?: React.ErrorInfo) => {
 		setError(error);
 		reportError(error, {
 			errorInfo,

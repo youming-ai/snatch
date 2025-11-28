@@ -215,93 +215,102 @@ export class PerformanceMonitor {
 /**
  * Resource loading utilities
  */
-export class ResourceLoader {
-	private static loadedScripts = new Set<string>();
-	private static loadedStyles = new Set<string>();
+const loadedScripts = new Set<string>();
+const loadedStyles = new Set<string>();
 
-	/**
-	 * Load external script
-	 */
-	static async loadScript(
-		src: string,
-		options: {
-			async?: boolean;
-			defer?: boolean;
-			integrity?: string;
-			crossOrigin?: string;
-		} = {},
-	): Promise<void> {
-		if (ResourceLoader.loadedScripts.has(src)) {
-			return;
-		}
-
-		return new Promise((resolve, reject) => {
-			const script = document.createElement("script");
-			script.src = src;
-			script.async = options.async ?? true;
-			script.defer = options.defer ?? false;
-
-			if (options.integrity) {
-				script.integrity = options.integrity;
-			}
-
-			if (options.crossOrigin) {
-				script.crossOrigin = options.crossOrigin;
-			}
-
-			script.onload = () => {
-				ResourceLoader.loadedScripts.add(src);
-				resolve();
-			};
-
-			script.onerror = () => {
-				reject(new Error(`Failed to load script: ${src}`));
-			};
-
-			document.head.appendChild(script);
-		});
+/**
+ * Load external script
+ */
+export async function loadScript(
+	src: string,
+	options: {
+		async?: boolean;
+		defer?: boolean;
+		integrity?: string;
+		crossOrigin?: string;
+	} = {},
+): Promise<void> {
+	if (loadedScripts.has(src)) {
+		return;
 	}
 
-	/**
-	 * Load external stylesheet
-	 */
-	static async loadStyle(href: string): Promise<void> {
-		if (ResourceLoader.loadedStyles.has(href)) {
-			return;
+	return new Promise((resolve, reject) => {
+		const script = document.createElement("script");
+		script.src = src;
+		script.async = options.async ?? true;
+		script.defer = options.defer ?? false;
+
+		if (options.integrity) {
+			script.integrity = options.integrity;
 		}
 
-		return new Promise((resolve, reject) => {
-			const link = document.createElement("link");
-			link.rel = "stylesheet";
-			link.href = href;
+		if (options.crossOrigin) {
+			script.crossOrigin = options.crossOrigin;
+		}
 
-			link.onload = () => {
-				ResourceLoader.loadedStyles.add(href);
-				resolve();
-			};
+		script.onload = () => {
+			loadedScripts.add(src);
+			resolve();
+		};
 
-			link.onerror = () => {
-				reject(new Error(`Failed to load stylesheet: ${href}`));
-			};
+		script.onerror = () => {
+			reject(new Error(`Failed to load script: ${src}`));
+		};
 
-			document.head.appendChild(link);
-		});
+		document.head.appendChild(script);
+	});
+}
+
+/**
+ * Load external stylesheet
+ */
+export async function loadStyle(href: string): Promise<void> {
+	if (loadedStyles.has(href)) {
+		return;
 	}
+
+	return new Promise((resolve, reject) => {
+		const link = document.createElement("link");
+		link.rel = "stylesheet";
+		link.href = href;
+
+		link.onload = () => {
+			loadedStyles.add(href);
+			resolve();
+		};
+
+		link.onerror = () => {
+			reject(new Error(`Failed to load stylesheet: ${href}`));
+		};
+
+		document.head.appendChild(link);
+	});
 }
 
 /**
  * Memory usage monitoring (in supported browsers)
  */
+interface PerformanceMemory {
+	usedJSHeapSize: number;
+	totalJSHeapSize: number;
+	jsHeapSizeLimit: number;
+}
+
+interface PerformanceWithMemory extends Performance {
+	memory?: PerformanceMemory;
+}
+
 export function getMemoryUsage(): {
 	used: number;
 	allocated: number;
 	limit: number;
 } | null {
-	if (!(performance as any).memory) {
+	const perf = performance as PerformanceWithMemory;
+	if (!perf.memory) {
 		return null;
 	}
 
-	const memory = (performance as any).memory;
+	const memory = perf.memory;
 	return {
 		used: memory.usedJSHeapSize,
 		allocated: memory.totalJSHeapSize,
@@ -312,17 +321,29 @@ export function getMemoryUsage(): {
 /**
  * Network information utility
  */
+interface NetworkInformation {
+	effectiveType?: string;
+	downlink?: number;
+	rtt?: number;
+	saveData?: boolean;
+}
+
+interface NavigatorWithConnection extends Navigator {
+	connection?: NetworkInformation;
+}
+
 export function getNetworkInfo(): {
 	effectiveType?: string;
 	downlink?: number;
 	rtt?: number;
 	saveData?: boolean;
 } | null {
-	if (!(navigator as any).connection) {
+	const nav = navigator as NavigatorWithConnection;
+	if (!nav.connection) {
 		return null;
 	}
 
-	const connection = (navigator as any).connection;
+	const connection = nav.connection;
 	return {
 		effectiveType: connection.effectiveType,
 		downlink: connection.downlink,
@@ -334,49 +355,48 @@ export function getNetworkInfo(): {
 /**
  * Performance marks and measures
  */
-export class PerformanceTracker {
-	/**
-	 * Mark a performance point
-	 */
-	static mark(name: string): void {
-		performance.mark(name);
+
+/**
+ * Mark a performance point
+ */
+export function markPerformance(name: string): void {
+	performance.mark(name);
+}
+
+/**
+ * Measure between two marks
+ */
+export function measurePerformance(name: string, startMark: string, endMark?: string): number {
+	const measureName = `${name}-measure`;
+
+	try {
+		performance.measure(measureName, startMark, endMark);
+		const entries = performance.getEntriesByName(measureName, "measure");
+		return entries[entries.length - 1]?.duration || 0;
+	} catch (error) {
+		console.warn("Performance measure failed:", error);
+		return 0;
 	}
+}
 
-	/**
-	 * Measure between two marks
-	 */
-	static measure(name: string, startMark: string, endMark?: string): number {
-		const measureName = `${name}-measure`;
-
-		try {
-			performance.measure(measureName, startMark, endMark);
-			const entries = performance.getEntriesByName(measureName, "measure");
-			return entries[entries.length - 1]?.duration || 0;
-		} catch (error) {
-			console.warn("Performance measure failed:", error);
-			return 0;
-		}
+/**
+ * Clear marks
+ */
+export function clearPerformanceMarks(name?: string): void {
+	if (name) {
+		performance.clearMarks(name);
+	} else {
+		performance.clearMarks();
 	}
+}
 
-	/**
-	 * Clear marks
-	 */
-	static clearMarks(name?: string): void {
-		if (name) {
-			performance.clearMarks(name);
-		} else {
-			performance.clearMarks();
-		}
-	}
-
-	/**
-	 * Clear measures
-	 */
-	static clearMeasures(name?: string): void {
-		if (name) {
-			performance.clearMeasures(name);
-		} else {
-			performance.clearMeasures();
-		}
+/**
+ * Clear measures
+ */
+export function clearPerformanceMeasures(name?: string): void {
+	if (name) {
+		performance.clearMeasures(name);
+	} else {
+		performance.clearMeasures();
 	}
 }

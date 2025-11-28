@@ -62,11 +62,11 @@ export function PlatformsSection({
 			</div>
 
 			<div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
-				{supportedPlatforms.map((platform, index) => {
+				{supportedPlatforms.map((platform) => {
 					const status = getPlatformStatus(platform.name);
 					return (
 						<Card
-							key={index}
+							key={platform.name}
 							className="group hover:shadow-lg transition-all duration-200 hover:-translate-y-1 border-border/50 hover:border-border"
 						>
 							<CardHeader className="text-center pb-4">
@@ -154,8 +154,8 @@ export function PlatformsSection({
 							title: "Privacy First",
 							description: "We don't store your downloaded content",
 						},
-					].map((feature, index) => (
-						<div key={index} className="p-4 text-center">
+					].map((feature) => (
+						<div key={feature.title} className="p-4 text-center">
 							<h4 className="font-medium mb-1">{feature.title}</h4>
 							<p className="text-xs text-muted-foreground">
 								{feature.description}

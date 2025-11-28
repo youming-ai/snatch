@@ -1,12 +1,12 @@
 import {
 	Download,
 	ExternalLink,
-	Image,
-	Video,
-	Play,
 	Heart,
+	Image,
 	MessageCircle,
+	Play,
 	Share2,
+	Video,
 } from "lucide-react";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 
@@ -129,6 +129,7 @@ export function DownloadResult({ result }: DownloadResultProps) {
 				{/* Actions */}
 				<div className="flex gap-3">
 					<button
+						type="button"
 						onClick={handleDownload}
 						className="flex-1 px-4 py-3.5 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-all flex items-center justify-center gap-2 shadow-lg shadow-white/5 hover:scale-[1.02] active:scale-[0.98]"
 					>
@@ -136,6 +137,7 @@ export function DownloadResult({ result }: DownloadResultProps) {
 						<Download className="w-4 h-4" />
 					</button>
 					<button
+						type="button"
 						onClick={handleOpenOriginal}
 						className="px-4 py-3.5 bg-white/5 border border-white/10 text-white rounded-xl hover:bg-white/10 transition-all hover:scale-[1.02] active:scale-[0.98]"
 						title="Open Original"

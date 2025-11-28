@@ -1,9 +1,9 @@
 import type { DownloadResult } from "@/types/download";
 import {
+	CrawleeError,
+	CrawleeErrorType,
 	EnhancedCrawleeDownloader,
 	type EnhancedCrawleeOptions,
-	CrawleeErrorType,
-	CrawleeError,
 	type ExtractedData,
 } from "../enhanced-crawlee-downloader";
 
@@ -447,7 +447,7 @@ export class TwitterCrawleeDownloader extends EnhancedCrawleeDownloader {
 					const authorLink = authorElement.querySelector("a");
 					if (authorLink) {
 						author = authorLink.textContent || "";
-						username = author.getAttribute("href")?.replace(/[\/@]/g, "") || "";
+						username = author.getAttribute("href")?.replace(/[/@]/g, "") || "";
 					}
 				}
 

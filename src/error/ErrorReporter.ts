@@ -256,7 +256,7 @@ export function reportError(
 /**
  * Higher-order function to wrap functions with error reporting
  */
-export function withErrorReporting<T extends (...args: any[]) => any>(
+export function withErrorReporting<T extends (...args: unknown[]) => unknown>(
 	fn: T,
 	context?: ErrorInfo["context"],
 ): T {

@@ -600,7 +600,7 @@ export abstract class EnhancedCrawleeDownloader {
 				if (attempt > 0) {
 					const delay = Math.min(
 						retryConfig.initialDelay *
-							Math.pow(retryConfig.backoffFactor, attempt - 1),
+							retryConfig.backoffFactor ** (attempt - 1),
 						retryConfig.maxDelay,
 					);
 					if (log && typeof log.info === "function") {

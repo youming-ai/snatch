@@ -1,9 +1,9 @@
 import type { DownloadResult } from "@/types/download";
 import {
+	CrawleeError,
+	CrawleeErrorType,
 	EnhancedCrawleeDownloader,
 	type EnhancedCrawleeOptions,
-	CrawleeErrorType,
-	CrawleeError,
 	type ExtractedData,
 } from "../enhanced-crawlee-downloader";
 
@@ -387,9 +387,7 @@ export class TikTokCrawleeDownloader extends EnhancedCrawleeDownloader {
 				for (const selector of selectors) {
 					const element = document.querySelector(selector);
 					if (element) {
-						const username = element
-							.getAttribute("href")
-							?.replace(/[\/@]/g, "");
+						const username = element.getAttribute("href")?.replace(/[/@]/g, "");
 						const name =
 							element.querySelector('[data-e2e="user-title"]')?.textContent ||
 							element.textContent?.trim() ||

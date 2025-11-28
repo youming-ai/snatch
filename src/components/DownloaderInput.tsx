@@ -38,6 +38,7 @@ export function DownloaderInput({
 					/>
 				</div>
 				<button
+					type="button"
 					onClick={onDownload}
 					disabled={loading || !url?.trim()}
 					className="px-8 py-4 bg-white text-black font-bold rounded-xl hover:bg-gray-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 shadow-lg shadow-white/10 hover:shadow-white/20 hover:scale-[1.02] active:scale-[0.98]"

@@ -1,9 +1,9 @@
 import type { DownloadResult } from "@/types/download";
 import {
+	CrawleeError,
+	CrawleeErrorType,
 	EnhancedCrawleeDownloader,
 	type EnhancedCrawleeOptions,
-	CrawleeErrorType,
-	CrawleeError,
 	type ExtractedData,
 } from "../enhanced-crawlee-downloader";
 
@@ -297,7 +297,6 @@ export class TwitterCrawleeDownloader extends EnhancedCrawleeDownloader {
 					return result;
 				} catch (e) {
 					console.warn("Failed to parse __INITIAL_STATE__:", e);
-					continue;
 				}
 			}
 

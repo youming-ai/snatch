@@ -17,37 +17,6 @@ To build this application for production:
 pnpm build
 ```
 
-## Deploying to Cloudflare Pages
-
-This application is configured to deploy to Cloudflare Pages. To deploy:
-
-1. **Install Wrangler CLI** (if not already installed):
-```bash
-npm install -g wrangler
-```
-
-2. **Login to Cloudflare**:
-```bash
-wrangler login
-```
-
-3. **Build the application**:
-```bash
-pnpm build
-```
-
-4. **Deploy**:
-```bash
-npx wrangler deploy
-```
-
-The `wrangler.jsonc` configuration file is already set up for deployment. It configures:
-- Server-side rendering with the built server bundle
-- Static assets from the client build
-- Node.js compatibility for server-side features
-
-**Note**: Some features like Puppeteer/Crawlee-based downloaders may have limited functionality on Cloudflare Workers due to platform constraints. The application will gracefully fall back to alternative methods or mock data when server-side browser automation is not available.
-
 ## Testing
 
 This project uses [Vitest](https://vitest.dev/) for testing. You can run the tests with:

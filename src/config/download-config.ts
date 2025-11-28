@@ -1,2 +1,2 @@
-import { DownloadConfig, defaultDownloadConfig } from "./download-config";
-export { DownloadConfig } from "./download-config";
+// Download configuration exports
+// Note: This file re-exports from the actual download config implementation

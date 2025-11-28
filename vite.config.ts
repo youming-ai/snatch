@@ -39,13 +39,8 @@ const config = defineConfig({
       "playwright-extra",
     ],
   },
-  // Cloudflare Pages specific configuration
-  preview: {
-    port: 3000,
-  },
   define: {
     // Add environment variables for different platforms
-    __CLOUDFLARE_PAGES__: JSON.stringify(true),
     __BROWSER_ENV__: JSON.stringify(true),
   },
 });

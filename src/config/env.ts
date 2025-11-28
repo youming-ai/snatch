@@ -63,7 +63,7 @@ function parseEnv(): EnvConfig {
 		const value = import.meta.env[key];
 		if (value === undefined) return defaultValue;
 		const parsed = parseInt(value, 10);
-		if (isNaN(parsed)) {
+		if (Number.isNaN(parsed)) {
 			console.warn(
 				`Invalid number for ${key}: ${value}, using default: ${defaultValue}`,
 			);

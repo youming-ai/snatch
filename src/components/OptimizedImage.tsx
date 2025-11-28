@@ -31,7 +31,6 @@ export function OptimizedImage({
 }: OptimizedImageProps) {
 	const {
 		imageState,
-		isIntersecting,
 		optimizedSrc,
 		imgRef,
 		handleLoad,

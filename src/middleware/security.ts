@@ -70,7 +70,7 @@ export function getClientId(request: Request): string {
 	// Try to get IP from various headers
 	const forwarded = request.headers.get("x-forwarded-for");
 	const realIp = request.headers.get("x-real-ip");
-	const cfConnectingIp = request.headers.get("cf-connecting-ip"); // Cloudflare
+	const cfConnectingIp = request.headers.get("cf-connecting-ip"); // CF proxy IP
 
 	let ip = realIp || cfConnectingIp || "unknown";
 

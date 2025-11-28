@@ -80,7 +80,7 @@ export interface DownloadHistory {
 	error?: string;
 }
 
-export interface ValidationError {
+export interface IValidationError {
 	field: string;
 	message: string;
 	code: string;
@@ -88,7 +88,7 @@ export interface ValidationError {
 
 export interface ValidationResult {
 	isValid: boolean;
-	errors: ValidationError[];
+	errors: IValidationError[];
 	platform?: SupportedPlatform;
 	contentId?: string;
 	sanitizedUrl?: string;
@@ -112,7 +112,7 @@ export interface RateLimitInfo {
 export interface APIError {
 	code: string;
 	message: string;
-	details?: any;
+	details?: unknown;
 	timestamp: Date;
 	requestId?: string;
 }

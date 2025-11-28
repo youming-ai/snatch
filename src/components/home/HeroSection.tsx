@@ -99,9 +99,9 @@ export function HeroSection({
 						description: "No registration required, completely free service",
 						icon: "🆓",
 					},
-				].map((feature, index) => (
+				].map((feature) => (
 					<div
-						key={index}
+						key={feature.title}
 						className="p-6 rounded-lg bg-card/50 backdrop-blur-sm border border-border/50 hover:border-border transition-colors"
 					>
 						<div className="text-2xl mb-2">{feature.icon}</div>

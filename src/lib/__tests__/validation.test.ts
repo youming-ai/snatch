@@ -15,8 +15,8 @@ describe("validation", () => {
 		});
 
 		it("should reject null/undefined inputs", () => {
-			expect(validate(null as any).isValid).toBe(false);
-			expect(validate(undefined as any).isValid).toBe(false);
+			expect(validate(null as unknown as string).isValid).toBe(false);
+			expect(validate(undefined as unknown as string).isValid).toBe(false);
 		});
 	});
 

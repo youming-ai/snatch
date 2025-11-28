@@ -10,8 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 /**
  * Lazy loading wrapper with fallback
+ * @internal Currently unused but kept for future use
  */
-function LazyWrapper<T extends ComponentType<Record<string, never>>>({
+function _LazyWrapper<T extends ComponentType<Record<string, never>>>({
 	component,
 	fallback,
 }: {

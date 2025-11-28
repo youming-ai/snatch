@@ -30,9 +30,9 @@ export function ResultsSection({
 
 				{/* Loading skeleton */}
 				<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-					{Array.from({ length: 3 }).map((_, index) => (
+					{["skeleton-1", "skeleton-2", "skeleton-3"].map((skeletonId) => (
 						<div
-							key={index}
+							key={skeletonId}
 							className="animate-pulse border rounded-lg p-4 space-y-3"
 						>
 							<div className="bg-muted rounded h-32 w-full" />
@@ -64,6 +64,7 @@ export function ResultsSection({
 					</p>
 				</div>
 				<button
+					type="button"
 					onClick={onClearResults}
 					className="text-sm text-muted-foreground hover:text-foreground transition-colors"
 				>
@@ -91,9 +92,9 @@ export function ResultsSection({
 						<p className="text-sm text-muted-foreground">
 							Download all {results.length} items at once
 						</p>
-						<button className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
-							Download All Items
-						</button>
+<button type="button" className="inline-flex items-center justify-center rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none ring-offset-background bg-primary text-primary-foreground hover:bg-primary/90 h-10 px-4 py-2">
+								Download All Items
+							</button>
 					</div>
 				</div>
 			)}
