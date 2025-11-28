@@ -9,7 +9,9 @@
     "test": "vitest run",
     "format": "biome format",
     "lint": "biome lint",
-    "check": "biome check"
+    "check": "biome check",
+    "vercel-build": "vite build",
+    "vercel-deploy": "vercel --prod"
   },
   "dependencies": {
     "@crawlee/browser-pool": "^3.15.3",
