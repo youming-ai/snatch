@@ -182,13 +182,16 @@ export function useErrorBoundary() {
 		setError(null);
 	}, []);
 
-	const captureError = useCallback((error: Error, errorInfo?: React.ErrorInfo) => {
-		setError(error);
-		reportError(error, {
-			errorInfo,
-			source: "useErrorBoundary",
-		});
-	}, []);
+	const captureError = useCallback(
+		(error: Error, errorInfo?: React.ErrorInfo) => {
+			setError(error);
+			reportError(error, {
+				errorInfo,
+				source: "useErrorBoundary",
+			});
+		},
+		[],
+	);
 
 	// Simulate React's componentDidCatch behavior
 	useEffect(() => {

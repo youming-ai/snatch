@@ -51,7 +51,11 @@ function App() {
 		setResults([]);
 
 		try {
-			let downloadResponse: { success: boolean; results?: DownloadResult[]; message?: string };
+			let downloadResponse: {
+				success: boolean;
+				results?: DownloadResult[];
+				message?: string;
+			};
 
 			// Choose appropriate download service based on environment
 			if (environmentInfo.useClientSide) {

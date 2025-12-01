@@ -366,7 +366,11 @@ export function markPerformance(name: string): void {
 /**
  * Measure between two marks
  */
-export function measurePerformance(name: string, startMark: string, endMark?: string): number {
+export function measurePerformance(
+	name: string,
+	startMark: string,
+	endMark?: string,
+): number {
 	const measureName = `${name}-measure`;
 
 	try {
