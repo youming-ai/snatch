@@ -66,19 +66,10 @@ export class UnifiedDownloadService {
 			// Step 4: Validate and sanitize results
 			const sanitizedResults = this.sanitizeResults(results);
 
-			// Step 5: Check for fallback results and provide user feedback
-			const hasFallbackResults = sanitizedResults.some(
-				(result) => result.isFallback,
+			// Step 5: Log download completion
+			console.log(
+				`[Crawlee] ${validation.platform} download completed successfully in ${downloadDuration}ms`,
 			);
-			if (hasFallbackResults) {
-				console.log(
-					`[Fallback] ${validation.platform} download completed with Crawlee fallback in ${downloadDuration}ms`,
-				);
-			} else {
-				console.log(
-					`[Native] ${validation.platform} download completed successfully in ${downloadDuration}ms`,
-				);
-			}
 
 			return {
 				success: true,

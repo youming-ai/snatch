@@ -38,10 +38,10 @@ This is a social media downloader application built with **TanStack Start** (SSR
 #### 1. Platform Adapter Pattern
 The application uses a plugin-based architecture for platform support:
 
-- **Base Interface**: `src/lib/adapters/platform-adapter.ts` defines the `PlatformAdapter` abstract class
-- **Platform Implementations**: Each platform (Instagram, Twitter, TikTok) has its own adapter in `src/lib/adapters/`
+- **Base Interface**: `src/lib/adapters.ts` defines the `PlatformAdapter` interface and base class
+- **Platform Implementations**: Each platform (Instagram, Twitter, TikTok) has its own adapter in `src/lib/adapters.ts`
 - **Adapter Registry**: `src/lib/adapters/adapter-registry.ts` manages adapter lifecycle and provides discovery using a singleton pattern
-- **Native Downloaders**: Each adapter wraps platform-specific native downloaders in `src/lib/native-downloaders/` with sophisticated multi-strategy approaches
+- **Crawlee Downloaders**: Each adapter uses Crawlee-based downloaders in `src/lib/crawlee-downloaders/` for robust web scraping with Playwright
 
 #### 2. Unified Download Service
 All download operations go through the `UnifiedDownloadService` (`src/services/unified-download.service.ts`):
@@ -80,16 +80,14 @@ src/
 ├── constants/platforms.ts         # Platform configurations and URL patterns
 ├── lib/
 │   ├── validation.ts              # URL validation and platform detection
-│   ├── adapters/                  # Platform adapter implementations
-│   │   ├── platform-adapter.ts   # Abstract base class
-│   │   ├── instagram-adapter.ts  # Instagram-specific logic
-│   │   ├── twitter-adapter.ts    # Twitter/X-specific logic
-│   │   ├── tiktok-adapter.ts     # TikTok-specific logic
+│   ├── adapters.ts                # Platform adapters (Instagram, Twitter, TikTok)
+│   ├── adapters/
 │   │   └── adapter-registry.ts   # Adapter management and discovery
-│   └── native-downloaders/        # Platform-specific download implementations
-│       ├── instagram.ts           # Instagram native downloader
-│       ├── twitter.ts             # Twitter/X native downloader
-│       └── tiktok.ts              # TikTok native downloader
+│   ├── enhanced-crawlee-downloader.ts  # Base Crawlee downloader class
+│   └── crawlee-downloaders/       # Crawlee-based download implementations
+│       ├── instagram-crawlee-downloader.ts  # Instagram Crawlee downloader
+│       ├── twitter-crawlee-downloader.ts    # Twitter/X Crawlee downloader
+│       └── tiktok-crawlee-downloader.ts     # TikTok Crawlee downloader
 ├── middleware/
 │   └── security.ts                # Security middleware (rate limiting, validation, sanitization)
 ├── services/
@@ -107,24 +105,30 @@ src/
 
 ### Adding New Platform Support
 
-1. **Create Native Downloader**:
+1. **Create Crawlee Downloader**:
    ```typescript
-   // src/lib/native-downloaders/newplatform.ts
-   export class NewPlatformDownloader {
-     async download(url: string): Promise<DownloadResult[]> {
-       // Platform-specific implementation
+   // src/lib/crawlee-downloaders/newplatform-crawlee-downloader.ts
+   export class NewPlatformCrawleeDownloader extends EnhancedCrawleeDownloader {
+     constructor(options: EnhancedCrawleeOptions = {}) {
+       super("newplatform", options);
+     }
+     
+     protected async extractFromPage(page: any, url: string, log: any): Promise<ExtractedData | null> {
+       // Platform-specific extraction implementation using Playwright
      }
    }
    ```
 
 2. **Create Platform Adapter**:
    ```typescript
-   // src/lib/adapters/newplatform-adapter.ts
-   export class NewPlatformAdapter extends PlatformAdapter {
-     readonly platform = "newplatform" as const;
+   // Add to src/lib/adapters.ts
+   export class NewPlatformAdapter extends BasePlatformAdapter {
+     readonly platform: SupportedPlatform = "newplatform";
      readonly name = "New Platform";
      
-     // Implement required methods: isValidUrl, extractContentId, download
+     private crawleeDownloader = new NewPlatformCrawleeDownloader();
+     
+     // Implement required methods: canHandle, extractId, download
    }
    ```
 
