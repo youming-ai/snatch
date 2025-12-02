@@ -1,5 +1,0 @@
-User-agent: *
-Allow: /
-
-# Allow all search engines to index the site
-Sitemap: https://ins-x-tiktok-downloader.pages.dev/sitemap.xml

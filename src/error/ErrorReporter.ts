@@ -90,10 +90,8 @@ export class ErrorReporter {
 				await this.sendToSentry(errorInfo);
 			}
 
-			// Custom error endpoint
-			if (config.apiBaseUrl) {
-				await this.sendToCustomEndpoint(errorInfo);
-			}
+			// Note: Custom error endpoint removed as apiBaseUrl is no longer configured
+			// If needed, add a specific error reporting endpoint URL to env config
 		} catch (serviceError) {
 			console.error("Failed to report error to service:", serviceError);
 		}
@@ -110,23 +108,6 @@ export class ErrorReporter {
 			error: errorInfo.error.message,
 			stack: errorInfo.error.stack,
 		});
-	}
-
-	/**
-	 * Send error to custom endpoint
-	 */
-	private async sendToCustomEndpoint(errorInfo: ErrorInfo): Promise<void> {
-		const response = await fetch(`${config.apiBaseUrl}/api/errors`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify(errorInfo),
-		});
-
-		if (!response.ok) {
-			throw new Error(`Failed to report error: ${response.status}`);
-		}
 	}
 
 	/**
