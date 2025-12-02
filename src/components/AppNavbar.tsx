@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router";
 import { Download, Github } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -15,10 +14,10 @@ export function AppNavbar() {
 					</p>
 				</div>
 				<Button asChild variant="ghost" className="font-medium">
-					<Link href="https://github.com" target="_blank">
+					<a href="https://github.com" target="_blank" rel="noopener noreferrer">
 						<Github size={18} className="mr-2" />
 						GitHub
-					</Link>
+					</a>
 				</Button>
 			</div>
 		</nav>

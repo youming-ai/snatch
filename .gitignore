@@ -5,7 +5,7 @@ node_modules/
 dist/
 build/
 .output/
-.vinxi/
+.astro/
 
 # Environment variables
 .env
@@ -29,8 +29,6 @@ pnpm-debug.log*
 *.tsbuildinfo
 
 # Application specific
-.tanstack
-.nitro
 .wrangler
 uploads/
 downloads/

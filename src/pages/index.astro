@@ -1,0 +1,25 @@
+---
+import { DownloaderApp } from '../components/DownloaderApp';
+import '../styles.css';
+---
+
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="generator" content={Astro.generator} />
+		<title>Social Media Downloader</title>
+        <meta name="description" content="Download videos and images from Instagram, TikTok, and X (Twitter)" />
+        <meta name="robots" content="index, follow" />
+        <meta property="og:title" content="MediaGrabber - Social Media Downloader" />
+        <meta property="og:description" content="Download high-quality videos and images from your favorite social platforms" />
+        <meta property="og:type" content="website" />
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+	</head>
+	<body>
+		<DownloaderApp client:load />
+	</body>
+</html>

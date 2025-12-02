@@ -1,4 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	CheckCircle,
@@ -11,14 +10,12 @@ import {
 import { useEffect, useState } from "react";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { getEnvironmentConfig } from "@/utils/environment-detector";
-import { DownloaderInput } from "../components/DownloaderInput";
-import { DownloadResult } from "../components/DownloadResult";
+import { DownloaderInput } from "./DownloaderInput";
+import { DownloadResult } from "./DownloadResult";
 import { clientDownloadService } from "../services/client-download.service";
-import { downloadService } from "../services/unified-download.service";
+import { detectPlatform } from "@/lib/validation";
 
-export const Route = createFileRoute("/")({ component: App });
-
-function App() {
+export function DownloaderApp() {
 	const [url, setUrl] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [results, setResults] = useState<DownloadResultType[]>([]);
@@ -38,7 +35,7 @@ function App() {
 			return;
 		}
 
-		const platform = downloadService.detectPlatform(url);
+		const platform = detectPlatform(url);
 		if (!platform) {
 			setError(
 				"Unsupported platform. Please enter Instagram, X (Twitter), or TikTok URL",
@@ -53,7 +50,7 @@ function App() {
 		try {
 			let downloadResponse: {
 				success: boolean;
-				results?: DownloadResult[];
+				results?: DownloadResultType[];
 				message?: string;
 			};
 
@@ -63,8 +60,22 @@ function App() {
 				downloadResponse = await clientDownloadService.download(url);
 				setDownloadMessage(downloadResponse.message || null);
 			} else {
-				// Use full server-side service for development and full production
-				downloadResponse = await downloadService.download(url);
+				// Use full server-side service via API
+				const response = await fetch("/api/download", {
+					method: "POST",
+					headers: {
+						"Content-Type": "application/json",
+					},
+					body: JSON.stringify({ url }),
+				});
+
+				const data = await response.json();
+
+				if (!response.ok) {
+					throw new Error(data.error || "Failed to download content");
+				}
+
+				downloadResponse = data;
 				setDownloadMessage(null);
 			}
 
