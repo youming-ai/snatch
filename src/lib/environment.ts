@@ -40,6 +40,11 @@ export function detectEnvironment(): EnvironmentInfo {
 	// Check for Vercel environment
 	const isVercel = isVercelEnvironment();
 
+	// Check for Cloudflare Pages environment
+	const isCloudflarePages =
+		typeof globalThis !== "undefined" &&
+		(globalThis as { CF_PAGES?: boolean }).CF_PAGES === true;
+
 	// Check development vs production
 	const isDevelopment =
 		process?.env?.NODE_ENV === "development" ||

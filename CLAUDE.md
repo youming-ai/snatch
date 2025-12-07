@@ -27,6 +27,9 @@ pnpx shadcn@latest add <component-name>
 
 # Install dependencies
 pnpm install
+
+# Run single test file
+pnpm test src/path/to/test.test.ts
 ```
 
 ## Architecture Overview
@@ -41,21 +44,20 @@ The application uses a plugin-based architecture for platform support:
 - **Base Interface**: `src/lib/adapters.ts` defines the `PlatformAdapter` interface and base class
 - **Platform Implementations**: Each platform (Instagram, Twitter, TikTok) has its own adapter in `src/lib/adapters.ts`
 - **Adapter Registry**: `src/lib/adapters/adapter-registry.ts` manages adapter lifecycle and provides discovery using a singleton pattern
-- **Crawlee Downloaders**: Each adapter uses Crawlee-based downloaders in `src/lib/crawlee-downloaders/` for robust web scraping with Playwright
+- **API-Based Downloaders**: Each platform uses specialized API downloaders in `src/lib/api-downloaders/` for efficient data extraction
 
-#### 2. Unified Download Service
-All download operations go through the `UnifiedDownloadService` (`src/services/unified-download.service.ts`):
-- **Singleton Pattern**: Ensures consistent state across the application
-- **Security First**: URL validation, sanitization, and 30-second timeout protection
-- **Type Safe**: Comprehensive TypeScript interfaces for all data flow
-- **Error Handling**: Consistent error handling with detailed logging and user-friendly messages
-- **CORS Handling**: Graceful handling of browser security restrictions
+#### 2. Dual Download Service Architecture
+The application implements both server-side and client-side download services:
+
+- **UnifiedDownloadService** (`src/services/unified-download.service.ts`): Server-side service with full browser automation capabilities
+- **ClientDownloadService** (`src/services/client-download.service.ts`): Client-side service for direct API calls when possible
+- **Service Selection**: `environment-detector.ts` automatically chooses the appropriate service based on the runtime environment
 
 #### 3. Security Middleware Layer
 Comprehensive security implementation in `src/middleware/security.ts`:
-- **Rate Limiting**: 10 requests per minute per client with IP-based identification
+- **Rate Limiting**: Configurable requests per minute per client with IP-based identification
 - **Input Sanitization**: All inputs validated and sanitized before processing
-- **CSRF Protection**: Token-based protection against cross-site request forgery
+- **XSS Prevention**: HTML tags, JavaScript protocols, and event handlers stripped from inputs
 - **Bot Detection**: Basic pattern matching for suspicious user agents
 
 #### 4. Type System Architecture
@@ -66,11 +68,11 @@ Comprehensive security implementation in `src/middleware/security.ts`:
 ### Key Architectural Decisions
 
 1. **TanStack Start over Next.js**: Chosen for superior SSR performance, file-based routing, and developer experience
-2. **shadcn/ui over HeroUI**: Better compatibility with TanStack Start and more maintainable component patterns
+2. **shadcn/ui Components**: Pre-built components with consistent design system
 3. **Adapter Pattern**: Enables easy addition of new social media platforms without core system changes
 4. **Service Layer Isolation**: Business logic separated from UI components for better testability
 5. **Type-First Development**: All external dependencies are wrapped with proper TypeScript interfaces
-6. **Singleton Services**: Download service and adapter registry use singleton pattern for consistent state management
+6. **Dual Service Architecture**: Server-side for complex scraping, client-side for direct API calls
 
 ### File Structure Highlights
 
@@ -83,40 +85,45 @@ src/
 │   ├── adapters.ts                # Platform adapters (Instagram, Twitter, TikTok)
 │   ├── adapters/
 │   │   └── adapter-registry.ts   # Adapter management and discovery
-│   ├── enhanced-crawlee-downloader.ts  # Base Crawlee downloader class
-│   └── crawlee-downloaders/       # Crawlee-based download implementations
-│       ├── instagram-crawlee-downloader.ts  # Instagram Crawlee downloader
-│       ├── twitter-crawlee-downloader.ts    # Twitter/X Crawlee downloader
-│       └── tiktok-crawlee-downloader.ts     # TikTok Crawlee downloader
+│   ├── api-downloaders/           # API-based download implementations
+│   │   ├── instagram-api-downloader.ts  # Instagram API downloader
+│   │   ├── twitter-api-downloader.ts    # Twitter/X API downloader
+│   │   ├── tiktok-api-downloader.ts     # TikTok API downloader
+│   │   └── index.ts                      # Export barrel
+│   └── environment.ts              # Environment configuration utilities
 ├── middleware/
 │   └── security.ts                # Security middleware (rate limiting, validation, sanitization)
 ├── services/
-│   └── unified-download.service.ts # Main service orchestrating downloads
+│   ├── unified-download.service.ts # Server-side download service
+│   └── client-download.service.ts  # Client-side download service
 ├── components/                    # React components
 │   ├── ui/                       # shadcn/ui components
-│   ├── DownloadForm.tsx           # Main download interface
-│   ├── ResultsDisplay.tsx         # Results presentation
+│   ├── DownloaderInput.tsx        # URL input component
+│   ├── DownloadResult.tsx         # Result display component
 │   └── [other components...]      # UI components
 ├── routes/
-│   ├── index.tsx                  # Main application page (600+ lines - needs decomposition)
+│   ├── index.tsx                  # Main application page (383 lines)
 │   ├── __root.tsx                 # Root layout and providers
 │   └── api/download.ts            # API endpoint for download requests
+├── utils/
+│   └── environment-detector.ts    # Runtime environment detection
+└── config/
+    └── env.ts                     # Environment configuration
 ```
 
 ### Adding New Platform Support
 
-1. **Create Crawlee Downloader**:
+1. **Create API Downloader**:
    ```typescript
-   // src/lib/crawlee-downloaders/newplatform-crawlee-downloader.ts
-   export class NewPlatformCrawleeDownloader extends EnhancedCrawleeDownloader {
-     constructor(options: EnhancedCrawleeOptions = {}) {
-       super("newplatform", options);
-     }
-     
-     protected async extractFromPage(page: any, url: string, log: any): Promise<ExtractedData | null> {
-       // Platform-specific extraction implementation using Playwright
-     }
-   }
+   // src/lib/api-downloaders/newplatform-api-downloader.ts
+   import { createBaseDownloader } from "./index";
+
+   export const newPlatformDownloader = createBaseDownloader({
+     platformName: "newplatform",
+     downloadFunction: async (url: string) => {
+       // Platform-specific download implementation
+     },
+   });
    ```
 
 2. **Create Platform Adapter**:
@@ -125,10 +132,10 @@ src/
    export class NewPlatformAdapter extends BasePlatformAdapter {
      readonly platform: SupportedPlatform = "newplatform";
      readonly name = "New Platform";
-     
-     private crawleeDownloader = new NewPlatformCrawleeDownloader();
-     
-     // Implement required methods: canHandle, extractId, download
+
+     protected async downloadWithMethod(url: string): Promise<DownloadResult> {
+       return this.apiDownloader(url);
+     }
    }
    ```
 
@@ -136,7 +143,7 @@ src/
    Update `src/constants/platforms.ts` with platform metadata and URL patterns
 
 4. **Register Adapter**:
-   Add to `adapter-registry.ts` initialization in `initializeAdapters()` method
+   Add to adapter-registry.ts initialization in `initializeAdapters()` method
 
 5. **Update Types**:
    Add platform to `SupportedPlatform` union type in `src/types/download.ts`
@@ -146,17 +153,17 @@ src/
 - **Package Manager**: Uses `pnpm` (scripts defined in package.json)
 - **Code Quality**: Biome for linting and formatting with tab indentation and double quotes
 - **Vite Configuration**: TanStack Start plugin with React and Tailwind CSS integration
-- **Path Aliases**: Configured through `vite-tsconfig-paths` for clean imports
+- **Path Aliases**: `@/*` mapped to `./src/*` for clean imports
 - **Build Tools**: Vite with React plugin for fast development and optimized builds
-- **Testing Framework**: Vitest with Testing Library integration (configured but no tests yet)
+- **Testing Framework**: Vitest with Testing Library integration (configured with test files in __tests__ directories)
 
 ### Security Considerations
 
-- **Rate Limiting**: In-memory rate limiting with automatic cleanup every 5 minutes
+- **Rate Limiting**: In-memory rate limiting with configurable window and max requests
 - **Input Validation**: All URLs validated against platform-specific regex patterns
 - **XSS Prevention**: HTML tags, JavaScript protocols, and event handlers stripped from inputs
 - **URL Sanitization**: Dangerous query parameters removed and protocol validation enforced
-- **Timeout Protection**: 30-second timeout on all download operations
+- **Timeout Protection**: Configurable timeout on download operations (default 30 seconds)
 - **Error Handling**: Comprehensive error logging with sanitized user messages
 - **CORS Handling**: Graceful degradation with user-friendly error messages
 
@@ -172,15 +179,15 @@ src/
 
 1. **Feature Development**: Work in feature branches, use `pnpm dev` for hot reloading on port 3000
 2. **Component Development**: Use shadcn/ui components as base, extend with custom variants
-3. **API Integration**: All external API calls go through the unified download service
+3. **API Integration**: All external API calls go through the appropriate download service
 4. **Code Quality**: Run `pnpm check` before commits to ensure linting and formatting
-5. **Testing**: Vitest is configured with Testing Library but currently has no tests - this is a priority
+5. **Testing**: Test files are located in `__tests__` directories alongside source files
 6. **Package Management**: The project uses pnpm for dependency management
 
 ### Known Issues & Technical Debt
 
-- **No Test Coverage**: Vitest is configured but no tests exist (high priority)
-- **Large Main Component**: `src/routes/index.tsx` is 600+ lines and needs component decomposition
+- **Limited Test Coverage**: Tests exist but need expansion (high priority)
+- **Main Component Size**: `src/routes/index.tsx` is 383 lines and could benefit from further decomposition
 - **Missing Error Boundaries**: React error boundaries should be implemented for better error handling
 - **Bundle Size**: Icon imports could be optimized with tree shaking
 - **Memory Leaks**: Rate limiting data cleanup should be monitored in production
@@ -193,4 +200,4 @@ src/
 - **Image Optimization**: Images should use `loading="lazy"` and proper fallbacks
 - **Bundle Analysis**: Regular bundle size monitoring recommended
 - **Memory Management**: Automatic cleanup of rate limiting data prevents memory leaks
-- **Singleton Pattern**: Reduces object creation overhead and memory usage
+- **Dual Service Pattern**: Client-side service reduces server load when direct API calls are possible

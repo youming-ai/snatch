@@ -48,12 +48,10 @@ export interface DownloadRequest {
 export interface PlatformConfig {
 	name: string;
 	domain: string;
-	urlPatterns: RegExp[];
-	colors: {
-		primary: string;
-		secondary: string;
-	};
-	icon: string;
+	color: string;
+	bgColor: string;
+	description: string;
+	supportedMedia: ("video" | "image")[];
 }
 
 export interface DownloadProgress {

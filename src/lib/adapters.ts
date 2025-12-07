@@ -1,7 +1,7 @@
-// Import Crawlee downloaders
-import { InstagramCrawleeDownloader } from "@/lib/crawlee-downloaders/instagram-crawlee-downloader";
-import { TikTokCrawleeDownloader } from "@/lib/crawlee-downloaders/tiktok-crawlee-downloader";
-import { TwitterCrawleeDownloader } from "@/lib/crawlee-downloaders/twitter-crawlee-downloader";
+// Import API-based downloaders (replacing Crawlee downloaders)
+import { InstagramApiDownloader } from "@/lib/api-downloaders/instagram-api-downloader";
+import { TikTokApiDownloader } from "@/lib/api-downloaders/tiktok-api-downloader";
+import { TwitterApiDownloader } from "@/lib/api-downloaders/twitter-api-downloader";
 import type { DownloadResult, SupportedPlatform } from "@/types/download";
 
 /**
@@ -77,7 +77,7 @@ abstract class BasePlatformAdapter implements PlatformAdapter {
 }
 
 /**
- * Instagram adapter implementation using Crawlee
+ * Instagram adapter implementation using yt-dlp
  */
 export class InstagramAdapter extends BasePlatformAdapter {
 	readonly platform: SupportedPlatform = "instagram";
@@ -89,7 +89,7 @@ export class InstagramAdapter extends BasePlatformAdapter {
 		/\/tv\/([A-Za-z0-9_-]+)/i,
 	];
 
-	private crawleeDownloader = new InstagramCrawleeDownloader();
+	private apiDownloader = new InstagramApiDownloader();
 
 	canHandle(url: string): boolean {
 		return url.toLowerCase().includes("instagram.com");
@@ -100,17 +100,17 @@ export class InstagramAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		console.log(`[${this.platform}] 🕷️ Using Crawlee downloader...`);
-		const results = await this.crawleeDownloader.download(url);
+		console.log(`[${this.platform}] 📦 Using instagram-url-direct API downloader...`);
+		const results = await this.apiDownloader.download(url);
 		console.log(
-			`[${this.platform}] ✅ Crawlee downloader succeeded with ${results.length} results`,
+			`[${this.platform}] ✅ API downloader succeeded with ${results.length} results`,
 		);
 		return results;
 	}
 }
 
 /**
- * Twitter/X adapter implementation using Crawlee
+ * Twitter/X adapter implementation using twitter-scraper API
  */
 export class TwitterAdapter extends BasePlatformAdapter {
 	readonly platform: SupportedPlatform = "twitter";
@@ -118,7 +118,7 @@ export class TwitterAdapter extends BasePlatformAdapter {
 
 	private readonly patterns = [/\/status\/(\d+)/i];
 
-	private crawleeDownloader = new TwitterCrawleeDownloader();
+	private apiDownloader = new TwitterApiDownloader();
 
 	canHandle(url: string): boolean {
 		const normalizedUrl = url.toLowerCase();
@@ -132,17 +132,17 @@ export class TwitterAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		console.log(`[${this.platform}] 🕷️ Using Crawlee downloader...`);
-		const results = await this.crawleeDownloader.download(url);
+		console.log(`[${this.platform}] 📦 Using twitter-scraper API downloader...`);
+		const results = await this.apiDownloader.download(url);
 		console.log(
-			`[${this.platform}] ✅ Crawlee downloader succeeded with ${results.length} results`,
+			`[${this.platform}] ✅ API downloader succeeded with ${results.length} results`,
 		);
 		return results;
 	}
 }
 
 /**
- * TikTok adapter implementation using Crawlee
+ * TikTok adapter implementation using tiktok-api-dl
  */
 export class TikTokAdapter extends BasePlatformAdapter {
 	readonly platform: SupportedPlatform = "tiktok";
@@ -150,7 +150,7 @@ export class TikTokAdapter extends BasePlatformAdapter {
 
 	private readonly patterns = [/\/video\/(\d+)/i, /\/@[^/]+\/video\/(\d+)/i];
 
-	private crawleeDownloader = new TikTokCrawleeDownloader();
+	private apiDownloader = new TikTokApiDownloader();
 
 	canHandle(url: string): boolean {
 		return url.toLowerCase().includes("tiktok.com");
@@ -161,10 +161,10 @@ export class TikTokAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		console.log(`[${this.platform}] 🕷️ Using Crawlee downloader...`);
-		const results = await this.crawleeDownloader.download(url);
+		console.log(`[${this.platform}] 📦 Using tiktok-api-dl downloader...`);
+		const results = await this.apiDownloader.download(url);
 		console.log(
-			`[${this.platform}] ✅ Crawlee downloader succeeded with ${results.length} results`,
+			`[${this.platform}] ✅ API downloader succeeded with ${results.length} results`,
 		);
 		return results;
 	}
