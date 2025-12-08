@@ -100,7 +100,9 @@ export class InstagramAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		console.log(`[${this.platform}] 📦 Using instagram-url-direct API downloader...`);
+		console.log(
+			`[${this.platform}] 📦 Using instagram-url-direct API downloader...`,
+		);
 		const results = await this.apiDownloader.download(url);
 		console.log(
 			`[${this.platform}] ✅ API downloader succeeded with ${results.length} results`,
@@ -132,7 +134,9 @@ export class TwitterAdapter extends BasePlatformAdapter {
 	}
 
 	async download(url: string): Promise<DownloadResult[]> {
-		console.log(`[${this.platform}] 📦 Using twitter-scraper API downloader...`);
+		console.log(
+			`[${this.platform}] 📦 Using twitter-scraper API downloader...`,
+		);
 		const results = await this.apiDownloader.download(url);
 		console.log(
 			`[${this.platform}] ✅ API downloader succeeded with ${results.length} results`,

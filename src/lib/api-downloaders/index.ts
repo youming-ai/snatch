@@ -1,8 +1,15 @@
 // Export all API-based downloaders
-export { TikTokApiDownloader, tiktokApiDownloader } from "./tiktok-api-downloader";
-export { TwitterApiDownloader, twitterApiDownloader } from "./twitter-api-downloader";
+
 export {
 	InstagramApiDownloader,
-	instagramApiDownloader,
 	type InstagramDownloaderOptions,
+	instagramApiDownloader,
 } from "./instagram-api-downloader";
+export {
+	TikTokApiDownloader,
+	tiktokApiDownloader,
+} from "./tiktok-api-downloader";
+export {
+	TwitterApiDownloader,
+	twitterApiDownloader,
+} from "./twitter-api-downloader";

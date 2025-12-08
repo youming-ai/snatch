@@ -122,4 +122,3 @@ export const config = {
 };
 
 export type { EnvConfig };
-

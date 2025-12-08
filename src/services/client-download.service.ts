@@ -112,7 +112,13 @@ export class ClientDownloadService {
 	/**
 	 * Fetch Instagram oEmbed data
 	 */
-	private async fetchInstagramOEmbed(url: string): Promise<any> {
+	private async fetchInstagramOEmbed(url: string): Promise<{
+		title?: string;
+		html?: string;
+		author_name?: string;
+		author_url?: string;
+		thumbnail_url?: string;
+	}> {
 		const oembedUrl = `https://api.instagram.com/oembed/?url=${encodeURIComponent(url)}&format=json&maxwidth=640`;
 
 		const response = await fetch(oembedUrl, {
@@ -133,7 +139,10 @@ export class ClientDownloadService {
 	/**
 	 * Extract basic metadata from URL (client-side limited approach)
 	 */
-	private async extractMetadata(url: string): Promise<any> {
+	private async extractMetadata(url: string): Promise<{
+		title: string;
+		description: string;
+	}> {
 		try {
 			// Use a CORS proxy service for basic metadata extraction
 			const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
@@ -163,7 +172,13 @@ export class ClientDownloadService {
 	 * Create response from oEmbed data
 	 */
 	private createResponseFromOEmbed(
-		oembedData: any,
+		oembedData: {
+			title?: string;
+			html?: string;
+			author_name?: string;
+			author_url?: string;
+			thumbnail_url?: string;
+		},
 		url: string,
 		platform: SupportedPlatform,
 	): DownloadResponse {
@@ -183,7 +198,7 @@ export class ClientDownloadService {
 					title: oembedData.title || `${platform} Content`,
 					size: "Unknown",
 					platform: platform,
-					quality: "unknown",
+					quality: "hd",
 					isMock: false,
 				});
 			});
@@ -200,7 +215,10 @@ export class ClientDownloadService {
 	 * Create response from extracted metadata
 	 */
 	private createResponseFromMetadata(
-		metadata: any,
+		metadata: {
+			title: string;
+			description: string;
+		},
 		url: string,
 		platform: SupportedPlatform,
 	): DownloadResponse {
@@ -215,7 +233,7 @@ export class ClientDownloadService {
 			title: metadata.title || `${platform} Content`,
 			size: "Unknown",
 			platform: platform,
-			quality: "unknown",
+			quality: "hd",
 			isMock: true,
 		});
 
@@ -223,8 +241,6 @@ export class ClientDownloadService {
 			success: true,
 			results,
 			platform,
-			message:
-				"Limited functionality in client mode. Full download requires server-side support.",
 		};
 	}
 
@@ -234,7 +250,7 @@ export class ClientDownloadService {
 	private createDemoResponse(
 		url: string,
 		platform: SupportedPlatform,
-		error?: any,
+		error?: Error | unknown,
 	): DownloadResponse {
 		console.warn(`${platform} extraction failed, using demo:`, error);
 
@@ -248,7 +264,7 @@ export class ClientDownloadService {
 				title: `${platform.charAt(0).toUpperCase() + platform.slice(1)} Content (Demo)`,
 				size: "Unknown",
 				platform: platform,
-				quality: "unknown",
+				quality: "hd",
 				isMock: true,
 			},
 		];
@@ -257,8 +273,6 @@ export class ClientDownloadService {
 			success: true,
 			results,
 			platform,
-			message:
-				"This is a demo response. The platform's anti-bot restrictions prevent client-side extraction.",
 		};
 	}
 

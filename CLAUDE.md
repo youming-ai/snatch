@@ -34,7 +34,7 @@ pnpm test src/path/to/test.test.ts
 
 ## Architecture Overview
 
-This is a social media downloader application built with **TanStack Start** (SSR-enabled React framework), **TypeScript**, **shadcn/ui**, and **Tailwind CSS**. The application supports downloading content from Instagram, X (Twitter), and TikTok with a focus on security, performance, and maintainability.
+This is a social media downloader application built with **Astro**, **React**, **TypeScript**, **shadcn/ui**, and **Tailwind CSS**. The application supports downloading content from Instagram, X (Twitter), and TikTok with a focus on security, performance, and maintainability.
 
 ### Core Architecture Patterns
 
@@ -67,7 +67,7 @@ Comprehensive security implementation in `src/middleware/security.ts`:
 
 ### Key Architectural Decisions
 
-1. **TanStack Start over Next.js**: Chosen for superior SSR performance, file-based routing, and developer experience
+1. **Astro over Next.js**: Chosen for superior performance, content-first architecture, and developer experience
 2. **shadcn/ui Components**: Pre-built components with consistent design system
 3. **Adapter Pattern**: Enables easy addition of new social media platforms without core system changes
 4. **Service Layer Isolation**: Business logic separated from UI components for better testability
@@ -92,7 +92,7 @@ src/
 │   │   └── index.ts                      # Export barrel
 │   └── environment.ts              # Environment configuration utilities
 ├── middleware/
-│   └── security.ts                # Security middleware (rate limiting, validation, sanitization)
+│   └── security.ts                # Astro middleware (rate limiting, validation, sanitization)
 ├── services/
 │   ├── unified-download.service.ts # Server-side download service
 │   └── client-download.service.ts  # Client-side download service
@@ -101,10 +101,11 @@ src/
 │   ├── DownloaderInput.tsx        # URL input component
 │   ├── DownloadResult.tsx         # Result display component
 │   └── [other components...]      # UI components
-├── routes/
-│   ├── index.tsx                  # Main application page (383 lines)
-│   ├── __root.tsx                 # Root layout and providers
-│   └── api/download.ts            # API endpoint for download requests
+├── pages/
+│   ├── index.astro                # Main application page
+│   └── layout.astro               # Root layout and providers
+├── routes/                        # API routes
+│   └── download.ts                # API endpoint for download requests
 ├── utils/
 │   └── environment-detector.ts    # Runtime environment detection
 └── config/
@@ -152,9 +153,9 @@ src/
 
 - **Package Manager**: Uses `pnpm` (scripts defined in package.json)
 - **Code Quality**: Biome for linting and formatting with tab indentation and double quotes
-- **Vite Configuration**: TanStack Start plugin with React and Tailwind CSS integration
+- **Astro Configuration**: Astro with React integration and Tailwind CSS plugin
 - **Path Aliases**: `@/*` mapped to `./src/*` for clean imports
-- **Build Tools**: Vite with React plugin for fast development and optimized builds
+- **Build Tools**: Astro's optimized build system for fast development and production builds
 - **Testing Framework**: Vitest with Testing Library integration (configured with test files in __tests__ directories)
 
 ### Security Considerations
@@ -177,7 +178,7 @@ src/
 
 ### Development Workflow
 
-1. **Feature Development**: Work in feature branches, use `pnpm dev` for hot reloading on port 3000
+1. **Feature Development**: Work in feature branches, use `pnpm dev` for hot reloading on port 4321
 2. **Component Development**: Use shadcn/ui components as base, extend with custom variants
 3. **API Integration**: All external API calls go through the appropriate download service
 4. **Code Quality**: Run `pnpm check` before commits to ensure linting and formatting
@@ -187,7 +188,7 @@ src/
 ### Known Issues & Technical Debt
 
 - **Limited Test Coverage**: Tests exist but need expansion (high priority)
-- **Main Component Size**: `src/routes/index.tsx` is 383 lines and could benefit from further decomposition
+- **Main Component Size**: `src/pages/index.astro` might benefit from further decomposition
 - **Missing Error Boundaries**: React error boundaries should be implemented for better error handling
 - **Bundle Size**: Icon imports could be optimized with tree shaking
 - **Memory Leaks**: Rate limiting data cleanup should be monitored in production
@@ -195,8 +196,8 @@ src/
 
 ### Performance Considerations
 
-- **SSR Benefits**: TanStack Start provides server-side rendering for better initial page loads
-- **Code Splitting**: File-based routing enables automatic code splitting
+- **SSR/SSG Benefits**: Astro provides server-side rendering and static site generation for optimal performance
+- **Code Splitting**: Astro's automatic code splitting for optimal loading
 - **Image Optimization**: Images should use `loading="lazy"` and proper fallbacks
 - **Bundle Analysis**: Regular bundle size monitoring recommended
 - **Memory Management**: Automatic cleanup of rate limiting data prevents memory leaks

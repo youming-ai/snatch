@@ -8,12 +8,12 @@ import {
 	XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { detectPlatform } from "@/lib/validation";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { getEnvironmentConfig } from "@/utils/environment-detector";
+import { clientDownloadService } from "../services/client-download.service";
 import { DownloaderInput } from "./DownloaderInput";
 import { DownloadResult } from "./DownloadResult";
-import { clientDownloadService } from "../services/client-download.service";
-import { detectPlatform } from "@/lib/validation";
 
 export function DownloaderApp() {
 	const [url, setUrl] = useState("");

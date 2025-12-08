@@ -5,19 +5,19 @@ export function Footer() {
 				<p>© {new Date().getFullYear()} MediaGrabber. All rights reserved.</p>
 				<div className="flex justify-center gap-6 mt-4">
 					<a
-						href="#"
+						href="/privacy"
 						className="text-sm hover:text-foreground transition-colors"
 					>
 						Privacy Policy
 					</a>
 					<a
-						href="#"
+						href="/terms"
 						className="text-sm hover:text-foreground transition-colors"
 					>
 						Terms of Service
 					</a>
 					<a
-						href="#"
+						href="/contact"
 						className="text-sm hover:text-foreground transition-colors"
 					>
 						Contact

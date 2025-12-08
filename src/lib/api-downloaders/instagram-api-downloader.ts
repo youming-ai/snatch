@@ -1,7 +1,22 @@
 import type { DownloadResult } from "@/types/download";
 
 // Dynamic import for instagram-url-direct
-let instagramGetUrl: any = null;
+let instagramGetUrl:
+	| ((
+			url: string,
+			config?: { retries: number; delay: number },
+	  ) => Promise<{
+			url_list?: string[];
+			thumbnail?: string;
+			post_info?: {
+				username?: string;
+				caption?: string;
+				like_count?: number;
+				comment_count?: number;
+			};
+			media?: string;
+	  }>)
+	| null = null;
 
 async function getInstagramDownloader() {
 	if (!instagramGetUrl) {
@@ -65,6 +80,10 @@ export class InstagramApiDownloader {
 		try {
 			const getUrl = await getInstagramDownloader();
 
+			if (!getUrl) {
+				throw new Error("Failed to load Instagram downloader");
+			}
+
 			// Clean the URL (remove query params that might cause issues)
 			const cleanUrl = this.cleanUrl(url);
 			console.log(`[Instagram API] Fetching media info for: ${cleanUrl}`);
@@ -103,21 +122,37 @@ export class InstagramApiDownloader {
 	/**
 	 * Parse instagram-url-direct response to DownloadResult[]
 	 */
-	private parseResponse(response: any, originalUrl: string): DownloadResult[] {
+	private parseResponse(
+		response: {
+			url_list?: string[];
+			thumbnail?: string;
+			post_info?: {
+				username?: string;
+				caption?: string;
+				like_count?: number;
+				comment_count?: number;
+			};
+			media?: string;
+		},
+		originalUrl: string,
+	): DownloadResult[] {
 		const results: DownloadResult[] = [];
-		const contentId = this.extractContentId(originalUrl) || `instagram_${Date.now()}`;
+		const contentId =
+			this.extractContentId(originalUrl) || `instagram_${Date.now()}`;
 
 		// Handle url_list (array of media URLs)
 		if (response.url_list && Array.isArray(response.url_list)) {
 			response.url_list.forEach((mediaUrl: string, index: number) => {
 				const isVideo = this.isVideoUrl(mediaUrl);
-				
+
 				results.push({
 					platform: "instagram" as const,
 					url: originalUrl,
 					id: `${contentId}_${index}`,
 					type: isVideo ? "video" : "image",
-					title: response.post_info?.caption || `Instagram ${isVideo ? "Video" : "Image"} ${index + 1}`,
+					title:
+						response.post_info?.caption ||
+						`Instagram ${isVideo ? "Video" : "Image"} ${index + 1}`,
 					thumbnail: response.thumbnail || mediaUrl,
 					downloadUrl: mediaUrl,
 					size: "Unknown",
@@ -134,8 +169,9 @@ export class InstagramApiDownloader {
 
 		// If no media found in url_list, check for single media
 		if (results.length === 0 && response.media) {
-			const isVideo = response.media.includes(".mp4") || response.media.includes("video");
-			
+			const isVideo =
+				response.media.includes(".mp4") || response.media.includes("video");
+
 			results.push({
 				platform: "instagram" as const,
 				url: originalUrl,
@@ -156,7 +192,9 @@ export class InstagramApiDownloader {
 			throw new Error("No media found in Instagram response");
 		}
 
-		console.log(`[Instagram API] Successfully parsed ${results.length} media items`);
+		console.log(
+			`[Instagram API] Successfully parsed ${results.length} media items`,
+		);
 		return results;
 	}
 

@@ -14,7 +14,11 @@ export function AppNavbar() {
 					</p>
 				</div>
 				<Button asChild variant="ghost" className="font-medium">
-					<a href="https://github.com" target="_blank" rel="noopener noreferrer">
+					<a
+						href="https://github.com"
+						target="_blank"
+						rel="noopener noreferrer"
+					>
 						<Github size={18} className="mr-2" />
 						GitHub
 					</a>
