@@ -1,0 +1,39 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+.astro/
+
+# Development files
+*.log
+*.local
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+
+# Documentation (optional, can keep if needed)
+*.md
+!README.md
+
+# Tests
+__tests__/
+*.test.ts
+*.spec.ts
+vitest.config.ts
+coverage/

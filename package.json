@@ -9,9 +9,7 @@
     "test": "vitest run",
     "format": "biome format",
     "lint": "biome lint",
-    "check": "biome check",
-    "vercel-build": "astro build",
-    "vercel-deploy": "vercel --prod"
+    "check": "biome check"
   },
   "dependencies": {
     "@astrojs/node": "^9.5.1",

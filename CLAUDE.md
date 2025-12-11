@@ -12,7 +12,7 @@ pnpm dev
 pnpm build
 
 # Preview production build
-pnpm serve
+pnpm preview
 
 # Run tests
 pnpm test
@@ -20,7 +20,7 @@ pnpm test
 # Code quality
 pnpm lint          # Check for linting issues
 pnpm format        # Format code with Biome
-pnpm check          # Run both linting and formatting checks
+pnpm check         # Run both linting and formatting checks
 
 # Add shadcn/ui components
 pnpx shadcn@latest add <component-name>
