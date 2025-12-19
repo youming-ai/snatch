@@ -1,5 +1,4 @@
 import {
-	AlertCircle,
 	CheckCircle,
 	Instagram,
 	Loader2,
@@ -7,11 +6,9 @@ import {
 	Twitter,
 	XCircle,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { detectPlatform } from "@/lib/validation";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
-import { getEnvironmentConfig } from "@/utils/environment-detector";
-import { clientDownloadService } from "../services/client-download.service";
 import { DownloaderInput } from "./DownloaderInput";
 import { DownloadResult } from "./DownloadResult";
 
@@ -20,14 +17,6 @@ export function DownloaderApp() {
 	const [loading, setLoading] = useState(false);
 	const [results, setResults] = useState<DownloadResultType[]>([]);
 	const [error, setError] = useState<string | null>(null);
-	const [environmentInfo, setEnvironmentInfo] = useState(
-		getEnvironmentConfig(),
-	);
-	const [downloadMessage, setDownloadMessage] = useState<string | null>(null);
-
-	useEffect(() => {
-		setEnvironmentInfo(getEnvironmentConfig());
-	}, []);
 
 	const handleDownload = async () => {
 		if (!url?.trim()) {
@@ -48,40 +37,21 @@ export function DownloaderApp() {
 		setResults([]);
 
 		try {
-			let downloadResponse: {
-				success: boolean;
-				results?: DownloadResultType[];
-				message?: string;
-			};
+			const response = await fetch("/api/download", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ url }),
+			});
 
-			// Choose appropriate download service based on environment
-			if (environmentInfo.useClientSide) {
-				// Use client-side service for limited environments
-				downloadResponse = await clientDownloadService.download(url);
-				setDownloadMessage(downloadResponse.message || null);
-			} else {
-				// Use full server-side service via API
-				const response = await fetch("/api/download", {
-					method: "POST",
-					headers: {
-						"Content-Type": "application/json",
-					},
-					body: JSON.stringify({ url }),
-				});
+			const data = await response.json();
 
-				const data = await response.json();
-
-				if (!response.ok) {
-					throw new Error(data.error || "Failed to download content");
-				}
-
-				downloadResponse = data;
-				setDownloadMessage(null);
+			if (!response.ok) {
+				throw new Error(data.error || "Failed to download content");
 			}
 
-			const downloadResults = downloadResponse.success
-				? downloadResponse.results || []
-				: [];
+			const downloadResults = data.success ? data.results || [] : [];
 			setResults(downloadResults);
 		} catch (err) {
 			console.error("Download error:", err);
@@ -144,16 +114,14 @@ export function DownloaderApp() {
 						</div>
 
 						<h1 className="text-5xl md:text-7xl font-bold tracking-tight animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
-							Social Media{" "}
 							<span className="bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
-								Downloader
+								Snatch
 							</span>
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							The most powerful tool to download high-quality videos and images
-							from Instagram, TikTok, and X (Twitter). No watermarks, completely
-							free.
+							Grab videos and images from Instagram, TikTok, and X (Twitter). No
+							watermarks, completely free.
 						</p>
 					</div>
 
@@ -172,15 +140,6 @@ export function DownloaderApp() {
 							<div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
 								<XCircle className="w-5 h-5 shrink-0" />
 								<p className="text-sm font-medium">{error}</p>
-							</div>
-						</div>
-					)}
-
-					{downloadMessage && !error && (
-						<div className="max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
-							<div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl flex items-center gap-3 text-yellow-400">
-								<AlertCircle className="w-5 h-5 shrink-0" />
-								<p className="text-sm font-medium">{downloadMessage}</p>
 							</div>
 						</div>
 					)}
@@ -225,53 +184,6 @@ export function DownloaderApp() {
 							<p className="text-gray-400">
 								Please wait while we fetch the highest quality media...
 							</p>
-						</div>
-					</div>
-				)}
-
-				{/* Environment Warning */}
-				{environmentInfo.showDemoModeWarning && (
-					<div className="max-w-4xl mx-auto">
-						<div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-6 space-y-4">
-							<div className="flex items-start gap-3">
-								<AlertCircle className="w-6 h-6 text-yellow-400 flex-shrink-0 mt-0.5" />
-								<div className="space-y-2">
-									<h3 className="text-lg font-semibold text-yellow-400">
-										Limited Functionality in Current Environment
-									</h3>
-									<p className="text-gray-300 text-sm leading-relaxed">
-										Due to platform restrictions, some advanced features are
-										limited in this environment. Full functionality is available
-										in self-hosted environments with Node.js runtime.
-									</p>
-									<div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-										<div className="bg-white/5 rounded-lg p-3 border border-white/10">
-											<div className="text-green-400 text-xs font-medium mb-1">
-												✅ Available
-											</div>
-											<div className="text-gray-400 text-xs">
-												UI, URL validation, demo responses
-											</div>
-										</div>
-										<div className="bg-white/5 rounded-lg p-3 border border-white/10">
-											<div className="text-yellow-400 text-xs font-medium mb-1">
-												⚠️ Limited
-											</div>
-											<div className="text-gray-400 text-xs">
-												Client-side metadata extraction
-											</div>
-										</div>
-										<div className="bg-white/5 rounded-lg p-3 border border-white/10">
-											<div className="text-red-400 text-xs font-medium mb-1">
-												❌ Unavailable
-											</div>
-											<div className="text-gray-400 text-xs">
-												Server-side web scraping
-											</div>
-										</div>
-									</div>
-								</div>
-							</div>
 						</div>
 					</div>
 				)}

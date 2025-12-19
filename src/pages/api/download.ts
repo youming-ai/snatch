@@ -2,10 +2,74 @@ import type { APIRoute } from "astro";
 import {
 	checkRateLimit,
 	getClientId,
-	sanitizeResponse,
 	validateDownloadRequest,
 } from "@/middleware/security";
-import { downloadService } from "@/services/unified-download.service";
+import type { DownloadResult, SupportedPlatform } from "@/types/download";
+
+// Rust API service URL (configurable via environment)
+const RUST_API_URL = import.meta.env.RUST_API_URL || "http://localhost:3001";
+
+interface RustFormat {
+	quality: string;
+	url: string;
+	ext: string;
+	filesize?: number;
+}
+
+interface RustExtractResponse {
+	success: boolean;
+	platform: string;
+	title: string;
+	thumbnail?: string;
+	formats: RustFormat[];
+	error?: string;
+}
+
+/**
+ * Transform Rust API response to frontend DownloadResult format
+ */
+function transformRustResponse(
+	rustResponse: RustExtractResponse,
+	originalUrl: string,
+): DownloadResult[] {
+	const platform = rustResponse.platform as SupportedPlatform;
+
+	return rustResponse.formats.map((format, index) => {
+		// Use yt-dlp download endpoint with original social media URL
+		// This is more reliable than using the extracted video URL directly
+		const downloadUrl = `${RUST_API_URL}/api/download?url=${encodeURIComponent(originalUrl)}`;
+
+		return {
+			id: `${platform}-${Date.now()}-${index}`,
+			type: "video" as const,
+			url: originalUrl,
+			thumbnail: rustResponse.thumbnail,
+			downloadUrl,
+			title: rustResponse.title,
+			size: format.filesize ? formatFileSize(format.filesize) : "Unknown",
+			platform,
+			quality: parseQuality(format.quality),
+			isMock: false,
+		};
+	});
+}
+
+function formatFileSize(bytes: number): string {
+	if (bytes < 1024) return `${bytes} B`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parseQuality(quality: string): "hd" | "sd" | "audio" {
+	const q = quality.toLowerCase();
+	if (q.includes("1080") || q.includes("720") || q === "best" || q === "hd") {
+		return "hd";
+	}
+	if (q.includes("audio")) {
+		return "audio";
+	}
+	return "sd";
+}
 
 export const POST: APIRoute = async ({ request }) => {
 	try {
@@ -81,34 +145,37 @@ export const POST: APIRoute = async ({ request }) => {
 			);
 		}
 
-		// Use the unified download service
-		const response = await downloadService.download(url.trim());
+		// Forward request to Rust API service
+		const rustResponse = await fetch(`${RUST_API_URL}/api/extract`, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ url: url.trim() }),
+		});
 
-		if (!response.success) {
+		const rustData: RustExtractResponse = await rustResponse.json();
+
+		if (!rustData.success || !rustData.formats?.length) {
 			return new Response(
 				JSON.stringify({
 					success: false,
-					error: response.error || "Failed to process download request",
-					platform: response.platform,
+					error: rustData.error || "Failed to extract download links",
+					platform: rustData.platform,
 				}),
 				{
-					status: response.error?.includes("Unsupported") ? 400 : 500,
+					status: rustResponse.ok ? 500 : rustResponse.status,
 					headers: { "Content-Type": "application/json" },
 				},
 			);
 		}
 
-		// Sanitize response data
-		const sanitizedResults = sanitizeResponse(
-			(response.results || []) as unknown as Array<Record<string, unknown>>,
-			response.platform || "instagram",
-		);
+		// Transform to frontend format
+		const results = transformRustResponse(rustData, url.trim());
 
 		return new Response(
 			JSON.stringify({
 				success: true,
-				results: sanitizedResults,
-				platform: response.platform,
+				results,
+				platform: rustData.platform,
 			}),
 			{
 				status: 200,
@@ -127,16 +194,24 @@ export const POST: APIRoute = async ({ request }) => {
 			clientId: getClientId(request),
 		});
 
+		// Check if Rust service is unavailable
+		const isConnectionError =
+			error instanceof Error &&
+			(error.message.includes("ECONNREFUSED") ||
+				error.message.includes("fetch failed"));
+
 		return new Response(
 			JSON.stringify({
 				success: false,
-				error: "An unexpected error occurred. Please try again later.",
+				error: isConnectionError
+					? "Download service unavailable. Please ensure the backend is running."
+					: "An unexpected error occurred. Please try again later.",
 			}),
 			{
-				status: 500,
+				status: isConnectionError ? 503 : 500,
 				headers: {
 					"Content-Type": "application/json",
-					"X-Error-ID": Math.random().toString(36).substring(2, 11), // For debugging
+					"X-Error-ID": Math.random().toString(36).substring(2, 11),
 				},
 			},
 		);

@@ -1,5 +1,5 @@
 {
-  "name": "ins-x-tiktok-downloader",
+  "name": "snatch",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,29 +8,22 @@
     "preview": "astro preview",
     "test": "vitest run",
     "format": "biome format",
+    "format:fix": "biome format --fix",
     "lint": "biome lint",
+    "lint:fix": "biome lint --fix",
     "check": "biome check"
   },
   "dependencies": {
     "@astrojs/node": "^9.5.1",
     "@astrojs/react": "^4.4.2",
-    "@crawlee/browser-pool": "^3.15.3",
-    "@radix-ui/react-label": "^2.1.8",
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@tailwindcss/vite": "^4.0.6",
     "astro": "^5.16.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "crawlee": "^3.15.3",
     "framer-motion": "^12.23.24",
-    "instagram-url-direct": "^2.0.7",
     "lucide-react": "^0.544.0",
-    "playwright": "^1.56.1",
-    "playwright-extra": "^4.3.6",
-    "puppeteer": "^24.31.0",
-    "puppeteer-extra": "^3.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "tailwind-merge": "^3.0.2",
@@ -49,7 +42,6 @@
     "jsdom": "^27.0.0",
     "typescript": "^5.7.2",
     "vite": "^7.1.7",
-    "vitest": "^3.0.5",
-    "web-vitals": "^5.1.0"
+    "vitest": "^3.0.5"
   }
 }

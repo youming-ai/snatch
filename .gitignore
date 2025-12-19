@@ -7,9 +7,8 @@ build/
 .output/
 .astro/
 
-# Environment variables
-.env
-.env.*
+# Rust build outputs
+downloader-api/target/
 
 # IDE & Editor
 .vscode/
