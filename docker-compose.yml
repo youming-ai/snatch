@@ -28,6 +28,10 @@ services:
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
+    environment:
+      - RUST_LOG=info
+      # Uncomment and set for production:
+      # - ALLOWED_ORIGINS=https://your-domain.com
     restart: always
     networks:
       - app-network

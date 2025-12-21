@@ -49,7 +49,6 @@ pub struct DownloadQuery {
 pub async fn download_handler(Query(query): Query<DownloadQuery>) -> Response {
     use std::process::Stdio;
     use tokio::process::Command;
-    use tokio::io::AsyncReadExt;
     
     let video_url = &query.url;
     

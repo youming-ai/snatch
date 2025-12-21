@@ -27,6 +27,12 @@ pnpm-debug.log*
 # Runtime data
 *.tsbuildinfo
 
+# Environment files
+.env
+.env.local
+.env.*.local
+!.env.example
+
 # Application specific
 .wrangler
 uploads/
