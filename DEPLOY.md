@@ -17,9 +17,9 @@
           │                               │
           ▼                               ▼
 ┌─────────────────────┐       ┌─────────────────────────────┐
-│   Astro 前端 (SSR)  │       │   Rust 下载 API (Docker)     │
+│   Astro 前端 (SSR)  │       │   snatch-rs (Rust API)      │
 │   端口: 4321        │──────▶│   端口: 3001                 │
-│                     │       │   yt-dlp 内置               │
+│   Bun + Node        │       │   yt-dlp 内置               │
 └─────────────────────┘       └─────────────────────────────┘
 ```
 
@@ -60,7 +60,7 @@ bun run build
 
 # 使用 PM2 管理前端进程
 npm install -g pm2
-pm2 start "node ./dist/server/entry.mjs" --name frontend
+pm2 start "node ./dist/server/entry.mjs" --name snatch-frontend
 pm2 save
 pm2 startup
 ```
@@ -101,73 +101,33 @@ server {
 
 ---
 
-## 方案 B：Docker Compose 一键部署
+## 方案 B：Docker Compose 一键部署（推荐）
 
 **适合**: 生产环境、易于维护
 
-### docker-compose.yml
-
-```yaml
-version: '3.8'
-
-services:
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile.frontend
-    ports:
-      - "4321:4321"
-    environment:
-      - RUST_API_URL=http://api:3001
-    depends_on:
-      - api
-    restart: always
-
-  api:
-    build:
-      context: ./snatch-rs
-      dockerfile: Dockerfile
-    ports:
-      - "3001:3001"
-    restart: always
-
-  nginx:
-    image: nginx:alpine
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-    depends_on:
-      - frontend
-    restart: always
-```
-
-### Dockerfile.frontend
-
-```dockerfile
-FROM node:22-slim AS builder
-WORKDIR /app
-RUN npm install -g bun
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile
-COPY . .
-ENV RUST_API_URL=http://api:3001
-RUN bun run build
-
-FROM node:22-slim
-WORKDIR /app
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/node_modules ./node_modules
-EXPOSE 4321
-CMD ["node", "./dist/server/entry.mjs"]
-```
-
-### 部署命令
+项目已包含 `docker-compose.yml`，直接使用即可：
 
 ```bash
+# 一键启动
 docker compose up -d --build
+
+# 查看日志
+docker compose logs -f
+
+# 停止服务
+docker compose down
+```
+
+### 自定义配置
+
+编辑 `docker-compose.yml` 设置生产环境变量：
+
+```yaml
+services:
+  api:
+    environment:
+      - RUST_LOG=info
+      - ALLOWED_ORIGINS=https://your-domain.com  # 生产环境设置
 ```
 
 ---
@@ -176,7 +136,7 @@ docker compose up -d --build
 
 **适合**: 高流量、需要弹性扩展
 
-### 前端部署（Vercel / Cloudflare Pages）
+### 前端部署（Vercel / Railway）
 
 由于 Astro SSR 需要 Node.js 运行时，推荐：
 - **Vercel**: 原生支持 Astro SSR
@@ -218,6 +178,19 @@ RUST_API_URL=https://your-api.fly.dev
 | 个人使用 | 方案 A (单 VPS) |
 | 团队/生产 | 方案 B (Docker Compose) |
 | 高流量/弹性 | 方案 C (前后端分离) |
+
+---
+
+## 环境变量参考
+
+参考 `.env.example` 文件了解所有可配置项：
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `RUST_API_URL` | Rust API 地址 | `http://localhost:3001` |
+| `ALLOWED_ORIGINS` | CORS 允许的域名 | (空=允许所有) |
+| `RUST_LOG` | Rust 日志级别 | `info` |
+| `PORT` | 前端端口 | `4321` |
 
 ---
 

@@ -1,4 +1,8 @@
+# Snatch - Docker Compose Configuration
+# Usage: docker compose up -d --build
+
 services:
+  # Astro Frontend (SSR)
   frontend:
     build:
       context: .
@@ -9,19 +13,19 @@ services:
       - RUST_API_URL=http://api:3001
       - HOST=0.0.0.0
       - PORT=4321
-      - NODE_OPTIONS=--max-old-space-size=256
+      - NODE_ENV=production
     depends_on:
-      - api
-    restart: always
+      api:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
-      - app-network
+      - snatch-network
     deploy:
       resources:
         limits:
-          memory: 300M
-        reservations:
-          memory: 150M
+          memory: 256M
 
+  # Rust API (snatch-rs)
   api:
     build:
       context: ./snatch-rs
@@ -30,23 +34,22 @@ services:
       - "3001:3001"
     environment:
       - RUST_LOG=info
-      # Uncomment and set for production:
+      # Production: uncomment and set your domain
       # - ALLOWED_ORIGINS=https://your-domain.com
-    restart: always
+    restart: unless-stopped
     networks:
-      - app-network
+      - snatch-network
     deploy:
       resources:
         limits:
-          memory: 400M
-        reservations:
-          memory: 100M
+          memory: 256M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD", "curl", "-sf", "http://localhost:3001/health"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 3
+      start_period: 10s
 
 networks:
-  app-network:
+  snatch-network:
     driver: bridge

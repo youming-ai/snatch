@@ -1,4 +1,4 @@
-FROM oven/bun:1 AS builder
+FROM oven/bun:1-slim AS builder
 
 WORKDIR /app
 
@@ -15,12 +15,12 @@ COPY . .
 ENV RUST_API_URL=http://api:3001
 RUN bun run build
 
-# Production image
-FROM node:22-slim
+# Production image - use slim node for running the server
+FROM node:22-alpine
 
 WORKDIR /app
 
-# Copy built files
+# Copy built files only (no node_modules needed for SSR runtime)
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
@@ -29,6 +29,7 @@ COPY --from=builder /app/package.json ./
 ENV HOST=0.0.0.0
 ENV PORT=4321
 ENV RUST_API_URL=http://api:3001
+ENV NODE_ENV=production
 
 EXPOSE 4321
 

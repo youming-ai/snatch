@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-	validate,
 	detectPlatform,
 	extractContentId,
 	sanitize,
+	validate,
 } from "./validation";
 
 describe("detectPlatform", () => {
@@ -76,10 +76,7 @@ describe("extractContentId", () => {
 
 	it("should extract Twitter status ID", () => {
 		expect(
-			extractContentId(
-				"https://twitter.com/user/status/1234567890",
-				"twitter",
-			),
+			extractContentId("https://twitter.com/user/status/1234567890", "twitter"),
 		).toBe("1234567890");
 		expect(
 			extractContentId("https://x.com/user/status/9876543210", "twitter"),
@@ -88,9 +85,7 @@ describe("extractContentId", () => {
 
 	it("should return null for invalid URLs", () => {
 		expect(extractContentId("https://instagram.com/", "instagram")).toBeNull();
-		expect(
-			extractContentId("https://tiktok.com/@user", "tiktok"),
-		).toBeNull();
+		expect(extractContentId("https://tiktok.com/@user", "tiktok")).toBeNull();
 		expect(extractContentId("not-a-url", "twitter")).toBeNull();
 	});
 });
