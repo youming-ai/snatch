@@ -8,7 +8,7 @@ build/
 .astro/
 
 # Rust build outputs
-downloader-api/target/
+snatch-rs/target/
 
 # IDE & Editor
 .vscode/
@@ -23,6 +23,7 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 pnpm-debug.log*
+bun-debug.log*
 
 # Runtime data
 *.tsbuildinfo

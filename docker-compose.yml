@@ -24,7 +24,7 @@ services:
 
   api:
     build:
-      context: ./downloader-api
+      context: ./snatch-rs
       dockerfile: Dockerfile
     ports:
       - "3001:3001"

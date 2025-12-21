@@ -26,8 +26,8 @@ A fast, lightweight social media video downloader powered by Rust + yt-dlp.
 docker compose up api -d
 
 # Start frontend
-pnpm install
-pnpm dev
+bun install
+bun dev
 ```
 
 ### Production

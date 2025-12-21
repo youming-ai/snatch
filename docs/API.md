@@ -207,12 +207,12 @@ All error responses follow this format:
 
 ```bash
 # Start Rust API
-cd downloader-api
+cd snatch-rs
 cargo run
 
 # Or with Docker
-docker build -t downloader-api .
-docker run -p 3001:3001 downloader-api
+docker build -t snatch-rs .
+docker run -p 3001:3001 snatch-rs
 ```
 
 ### Testing with cURL

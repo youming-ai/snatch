@@ -22,9 +22,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/downloader-api /usr/local/bin/
+COPY --from=builder /app/target/release/snatch-rs /usr/local/bin/
 
 ENV RUST_LOG=info
 EXPOSE 3001
 
-CMD ["downloader-api"]
+CMD ["snatch-rs"]

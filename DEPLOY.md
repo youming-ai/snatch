@@ -41,24 +41,22 @@
 curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER
 
-# 2. 安装 Node.js
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
-sudo apt install -y nodejs
-npm install -g pnpm
+# 2. 安装 Bun
+curl -fsSL https://bun.sh/install | bash
 
 # 3. 克隆项目
-git clone https://github.com/youming-ai/ins-x-tiktok-downloader.git
-cd ins-x-tiktok-downloader
+git clone https://github.com/youming-ai/Snatch.git
+cd Snatch
 
 # 4. 构建并启动 Rust API
-cd downloader-api
-docker build -t downloader-api .
-docker run -d --name downloader-api --restart always -p 3001:3001 downloader-api
+cd snatch-rs
+docker build -t snatch-rs .
+docker run -d --name snatch-rs --restart always -p 3001:3001 snatch-rs
 
 # 5. 构建并启动前端
 cd ..
-pnpm install
-pnpm build
+bun install
+bun run build
 
 # 使用 PM2 管理前端进程
 npm install -g pm2
@@ -127,7 +125,7 @@ services:
 
   api:
     build:
-      context: ./downloader-api
+      context: ./snatch-rs
       dockerfile: Dockerfile
     ports:
       - "3001:3001"
@@ -151,12 +149,12 @@ services:
 ```dockerfile
 FROM node:22-slim AS builder
 WORKDIR /app
-RUN npm install -g pnpm
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
+RUN npm install -g bun
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile
 COPY . .
 ENV RUST_API_URL=http://api:3001
-RUN pnpm build
+RUN bun run build
 
 FROM node:22-slim
 WORKDIR /app
@@ -188,7 +186,7 @@ docker compose up -d --build
 
 ```bash
 # Fly.io 部署
-cd downloader-api
+cd snatch-rs
 flyctl launch
 flyctl deploy
 ```
