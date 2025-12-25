@@ -129,3 +129,128 @@ fn extract_formats(json: &serde_json::Value) -> Vec<VideoFormat> {
 
     formats
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_formats_from_single_url() {
+        let json = serde_json::json!({
+            "url": "https://example.com/video.mp4",
+            "ext": "mp4",
+            "filesize": 12345678
+        });
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].quality, "best");
+        assert_eq!(formats[0].url, "https://example.com/video.mp4");
+        assert_eq!(formats[0].ext, "mp4");
+        assert_eq!(formats[0].filesize, Some(12345678));
+    }
+
+    #[test]
+    fn test_extract_formats_from_array() {
+        let json = serde_json::json!({
+            "formats": [
+                {
+                    "url": "https://example.com/720p.mp4",
+                    "ext": "mp4",
+                    "height": 720,
+                    "vcodec": "h264",
+                    "filesize": 5000000
+                },
+                {
+                    "url": "https://example.com/1080p.mp4",
+                    "ext": "mp4",
+                    "height": 1080,
+                    "vcodec": "h264",
+                    "filesize": 10000000
+                },
+                {
+                    "url": "https://example.com/480p.mp4",
+                    "ext": "mp4",
+                    "height": 480,
+                    "vcodec": "h264",
+                    "filesize": 3000000
+                }
+            ]
+        });
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 3);
+        // Should be sorted by quality descending
+        assert_eq!(formats[0].quality, "1080p");
+        assert_eq!(formats[1].quality, "720p");
+        assert_eq!(formats[2].quality, "480p");
+    }
+
+    #[test]
+    fn test_extract_formats_filters_audio_only() {
+        let json = serde_json::json!({
+            "formats": [
+                {
+                    "url": "https://example.com/video.mp4",
+                    "ext": "mp4",
+                    "height": 1080,
+                    "vcodec": "h264"
+                },
+                {
+                    "url": "https://example.com/audio.mp3",
+                    "ext": "mp3",
+                    "vcodec": "none",
+                    "acodec": "aac"
+                }
+            ]
+        });
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].quality, "1080p");
+    }
+
+    #[test]
+    fn test_extract_formats_fallback_to_requested_downloads() {
+        let json = serde_json::json!({
+            "formats": [],
+            "requested_downloads": [
+                {
+                    "url": "https://example.com/video.mp4",
+                    "ext": "mp4",
+                    "filesize": 8000000
+                }
+            ]
+        });
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].quality, "best");
+    }
+
+    #[test]
+    fn test_extract_formats_empty_json() {
+        let json = serde_json::json!({});
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 0);
+    }
+
+    #[test]
+    fn test_extract_formats_without_height() {
+        let json = serde_json::json!({
+            "formats": [
+                {
+                    "url": "https://example.com/video.mp4",
+                    "ext": "mp4",
+                    "vcodec": "h264",
+                    "format_note": "medium"
+                }
+            ]
+        });
+
+        let formats = extract_formats(&json);
+        assert_eq!(formats.len(), 1);
+        assert_eq!(formats[0].quality, "medium");
+    }
+}

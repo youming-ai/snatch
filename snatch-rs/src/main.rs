@@ -10,8 +10,11 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use handlers::AppState;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::Mutex;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::timeout::TimeoutLayer;
@@ -58,11 +61,18 @@ async fn main() {
         }
     };
 
+    // Initialize cache (100 entries, 5 minute TTL)
+    let cache = Arc::new(Mutex::new(cache::Cache::new(100, Duration::from_secs(300))));
+
+    // Build application state
+    let app_state = AppState { cache };
+
     // Build router with middleware layers
     let app = Router::new()
         .route("/api/extract", post(handlers::extract_handler))
         .route("/api/download", get(handlers::download_handler))
         .route("/health", get(handlers::health_handler))
+        .with_state(app_state)
         // Layer order matters: timeout -> body limit -> cors
         .layer(TimeoutLayer::new(Duration::from_secs(60)))
         .layer(RequestBodyLimitLayer::new(1024 * 10)) // 10KB max body size

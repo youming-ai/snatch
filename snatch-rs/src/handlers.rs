@@ -1,17 +1,28 @@
+use crate::cache::Cache;
 use crate::extractor::extract_video_info;
 use crate::models::{ErrorResponse, ExtractRequest, ExtractResponse};
 use crate::validation::validate_url;
 use axum::{
     body::Body,
-    extract::Query,
+    extract::{Query, State},
     http::{header, StatusCode},
     response::{IntoResponse, Response},
     Json,
 };
 use serde::Deserialize;
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::sync::Mutex;
+
+/// Application state for handlers
+#[derive(Clone)]
+pub struct AppState {
+    pub cache: Arc<Mutex<Cache<String, ExtractResponse>>>,
+}
 
 /// Handle POST /api/extract
 pub async fn extract_handler(
+    State(state): State<AppState>,
     Json(payload): Json<ExtractRequest>,
 ) -> Result<Json<ExtractResponse>, (StatusCode, Json<ErrorResponse>)> {
     // Validate URL using the centralized validation module
@@ -20,9 +31,24 @@ pub async fn extract_handler(
         return Err((StatusCode::BAD_REQUEST, Json(ErrorResponse::new(error_msg))));
     }
 
+    // Check cache first
+    {
+        let mut cache = state.cache.lock().await;
+        if let Some(cached) = cache.get(&payload.url) {
+            return Ok(Json(cached));
+        }
+    }
+
     // Extract video info (also has validation, but we've already validated above)
     match extract_video_info(&payload.url).await {
-        Ok(response) => Ok(Json(response)),
+        Ok(response) => {
+            // Cache the successful response
+            {
+                let mut cache = state.cache.lock().await;
+                cache.put(payload.url.clone(), response.clone());
+            }
+            Ok(Json(response))
+        }
         Err(error) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(ErrorResponse::new(error)),
@@ -37,7 +63,10 @@ pub struct DownloadQuery {
 }
 
 /// Download endpoint - uses yt-dlp to download and stream the video
-pub async fn download_handler(Query(query): Query<DownloadQuery>) -> Response {
+pub async fn download_handler(
+    State(_state): State<AppState>,
+    Query(query): Query<DownloadQuery>,
+) -> Response {
     use std::process::Stdio;
     use tokio::process::Command;
 
