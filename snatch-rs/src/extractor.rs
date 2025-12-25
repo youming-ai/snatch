@@ -1,22 +1,40 @@
-use std::process::Stdio;
-use tokio::process::Command;
 use crate::models::{ExtractResponse, VideoFormat};
+use crate::retry::{is_retryable_error, retry_with_backoff};
+use crate::validation::{extract_platform, validate_url};
+use std::process::Stdio;
+use std::time::Duration;
+use tokio::process::Command;
+use tokio::time::timeout;
 
-/// Extract video information using yt-dlp
+/// Extract video information using yt-dlp with retry logic
 pub async fn extract_video_info(url: &str) -> Result<ExtractResponse, String> {
-    // Run yt-dlp with JSON output
-    let output = Command::new("yt-dlp")
-        .args([
-            "--dump-json",
-            "--no-warnings",
-            "--no-playlist",
-            url,
-        ])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()
-        .await
-        .map_err(|e| format!("Failed to run yt-dlp: {}. Is yt-dlp installed?", e))?;
+    // Validate URL first to prevent command injection
+    validate_url(url)?;
+
+    // Use retry logic for the extraction
+    // Clone URL for the async closure
+    let url = url.to_string();
+    retry_with_backoff(|| extract_video_info_internal(&url), 3).await
+}
+
+/// Internal extraction function (can be retried)
+async fn extract_video_info_internal(url: &str) -> Result<ExtractResponse, String> {
+    // Run yt-dlp with JSON output and timeout
+    let yt_dlp_timeout = Duration::from_secs(30);
+
+    let output = timeout(yt_dlp_timeout, async {
+        Command::new("yt-dlp")
+            .args(["--dump-json", "--no-warnings", "--no-playlist", url])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output()
+            .await
+    })
+    .await
+    .map_err(|_| {
+        "Request timeout (30s). The video may be too large or the server is busy.".to_string()
+    })?
+    .map_err(|e| format!("Failed to run yt-dlp: {}. Is yt-dlp installed?", e))?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -27,14 +45,11 @@ pub async fn extract_video_info(url: &str) -> Result<ExtractResponse, String> {
     let json: serde_json::Value = serde_json::from_str(&stdout)
         .map_err(|e| format!("Failed to parse yt-dlp output: {}", e))?;
 
-    // Extract platform
-    let platform = detect_platform(url);
+    // Extract platform using the validation module
+    let platform = extract_platform(url);
 
     // Extract title
-    let title = json["title"]
-        .as_str()
-        .unwrap_or("Untitled")
-        .to_string();
+    let title = json["title"].as_str().unwrap_or("Untitled").to_string();
 
     // Extract thumbnail
     let thumbnail = json["thumbnail"].as_str().map(String::from);
@@ -43,20 +58,6 @@ pub async fn extract_video_info(url: &str) -> Result<ExtractResponse, String> {
     let formats = extract_formats(&json);
 
     Ok(ExtractResponse::new(platform, title, thumbnail, formats))
-}
-
-/// Detect platform from URL
-fn detect_platform(url: &str) -> String {
-    let url_lower = url.to_lowercase();
-    if url_lower.contains("instagram.com") {
-        "instagram".to_string()
-    } else if url_lower.contains("tiktok.com") {
-        "tiktok".to_string()
-    } else if url_lower.contains("twitter.com") || url_lower.contains("x.com") {
-        "twitter".to_string()
-    } else {
-        "unknown".to_string()
-    }
 }
 
 /// Extract video formats from yt-dlp JSON output

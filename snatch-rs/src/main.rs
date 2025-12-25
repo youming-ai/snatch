@@ -1,10 +1,20 @@
+mod cache;
 mod extractor;
 mod handlers;
 mod models;
+mod retry;
+mod validation;
 
-use axum::{http::Method, routing::{get, post}, Router};
+use axum::{
+    http::Method,
+    routing::{get, post},
+    Router,
+};
 use std::net::SocketAddr;
+use std::time::Duration;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::limit::RequestBodyLimitLayer;
+use tower_http::timeout::TimeoutLayer;
 use tracing_subscriber;
 
 #[tokio::main]
@@ -21,9 +31,11 @@ async fn main() {
                 .split(',')
                 .filter_map(|s| s.trim().parse().ok())
                 .collect();
-            
+
             if allowed_origins.is_empty() {
-                tracing::warn!("ALLOWED_ORIGINS set but no valid origins parsed, using permissive CORS");
+                tracing::warn!(
+                    "ALLOWED_ORIGINS set but no valid origins parsed, using permissive CORS"
+                );
                 CorsLayer::new()
                     .allow_origin(Any)
                     .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
@@ -46,11 +58,14 @@ async fn main() {
         }
     };
 
-    // Build router
+    // Build router with middleware layers
     let app = Router::new()
         .route("/api/extract", post(handlers::extract_handler))
         .route("/api/download", get(handlers::download_handler))
         .route("/health", get(handlers::health_handler))
+        // Layer order matters: timeout -> body limit -> cors
+        .layer(TimeoutLayer::new(Duration::from_secs(60)))
+        .layer(RequestBodyLimitLayer::new(1024 * 10)) // 10KB max body size
         .layer(cors);
 
     // Get port from environment or default to 3001
@@ -58,15 +73,22 @@ async fn main() {
         .ok()
         .and_then(|p| p.parse().ok())
         .unwrap_or(3001);
-    
+
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     tracing::info!("🚀 Downloader API running on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr)
-        .await
-        .expect("Failed to bind to address - check if port is available");
-    
-    axum::serve(listener, app)
-        .await
-        .expect("Server error - failed to serve application");
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("Failed to bind to {}: {}", addr, e);
+            tracing::error!("Check if the port is already in use");
+            return;
+        }
+    };
+
+    tracing::info!("Server listening on {}", addr);
+
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("Server error: {}", e);
+    };
 }

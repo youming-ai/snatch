@@ -27,6 +27,7 @@ bun-debug.log*
 
 # Runtime data
 *.tsbuildinfo
+data/
 
 # Environment files
 .env

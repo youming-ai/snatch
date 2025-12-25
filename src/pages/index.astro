@@ -1,6 +1,7 @@
 ---
 import "../styles.css";
 import { DownloaderApp } from "../components/DownloaderApp";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 ---
 
 <html lang="en">
@@ -32,6 +33,8 @@ import { DownloaderApp } from "../components/DownloaderApp";
 		/>
 	</head>
 	<body>
-		<DownloaderApp client:load />
+		<ErrorBoundary>
+			<DownloaderApp client:load />
+		</ErrorBoundary>
 	</body>
 </html>
