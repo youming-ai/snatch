@@ -18,8 +18,9 @@
           ▼                               ▼
 ┌─────────────────────┐       ┌─────────────────────────────┐
 │   Astro 前端 (SSR)  │       │   snatch-rs (Rust API)      │
-│   端口: 4321        │──────▶│   端口: 3001                 │
-│   Bun + Node        │       │   yt-dlp 内置               │
+│   外部端口: 38702   │──────▶│   外部端口: 38701           │
+│   内部端口: 4321    │       │   内部端口: 3001            │
+│   Node.js Runtime  │       │   yt-dlp 内置               │
 └─────────────────────┘       └─────────────────────────────┘
 ```
 
@@ -67,6 +68,32 @@ pm2 startup
 
 ### Nginx 反向代理配置
 
+项目已包含 `nginx.conf.example` 配置文件，可直接使用：
+
+```bash
+# 复制配置文件
+sudo cp nginx.conf.example /etc/nginx/sites-available/snatch
+
+# 修改域名
+sudo nano /etc/nginx/sites-available/snatch
+# 将 'your-domain.com' 替换为你的实际域名
+
+# 更新端口（如果使用默认端口无需修改）
+# 前端: http://127.0.0.1:38702
+# API:  http://127.0.0.1:38701
+
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/snatch /etc/nginx/sites-enabled/
+
+# 测试配置
+sudo nginx -t
+
+# 获取 SSL 证书
+sudo certbot --nginx -d your-domain.com
+```
+
+**或手动配置**：
+
 ```nginx
 server {
     listen 80;
@@ -83,7 +110,7 @@ server {
 
     # 前端
     location / {
-        proxy_pass http://127.0.0.1:4321;
+        proxy_pass http://127.0.0.1:38702;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -91,10 +118,10 @@ server {
         proxy_cache_bypass $http_upgrade;
     }
 
-    # 下载 API（可选，如果前端直接调用 Docker 服务）
-    location /api/download {
-        proxy_pass http://127.0.0.1:3001/api/download;
-        proxy_read_timeout 300s;  # 下载可能需要较长时间
+    # API（可选，如果前端直接调用 Docker 服务）
+    location /api/ {
+        proxy_pass http://127.0.0.1:38701/api/;
+        proxy_read_timeout 300s;
     }
 }
 ```
@@ -120,14 +147,35 @@ docker compose down
 
 ### 自定义配置
 
-编辑 `docker-compose.yml` 设置生产环境变量：
+编辑 `.env` 文件设置生产环境变量：
+
+```bash
+# 复制环境变量模板
+cp .env.production.example .env
+
+# 编辑配置
+nano .env
+```
+
+**关键配置项**：
+
+| 变量 | 说明 | 生产环境推荐值 |
+|------|------|----------------|
+| `ALLOWED_ORIGINS` | CORS 允许的域名 | `https://your-domain.com` |
+| `RUST_LOG` | 日志级别 | `info` 或 `warn` |
+| `RATE_LIMIT_MAX` | 速率限制 | `10` (10请求/分钟) |
+
+**更新端口配置**（如需自定义）：
 
 ```yaml
+# docker-compose.yml
 services:
+  frontend:
+    ports:
+      - "38702:4321"  # 外部端口:38702, 内部端口:4321
   api:
-    environment:
-      - RUST_LOG=info
-      - ALLOWED_ORIGINS=https://your-domain.com  # 生产环境设置
+    ports:
+      - "38701:3001"  # 外部端口:38701, 内部端口:3001
 ```
 
 ---
@@ -183,14 +231,20 @@ RUST_API_URL=https://your-api.fly.dev
 
 ## 环境变量参考
 
-参考 `.env.example` 文件了解所有可配置项：
+参考 `.env.production.example` 文件了解所有可配置项：
 
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
-| `RUST_API_URL` | Rust API 地址 | `http://localhost:3001` |
+| `RUST_API_URL` | Rust API 地址 | `http://api:3001` |
 | `ALLOWED_ORIGINS` | CORS 允许的域名 | (空=允许所有) |
 | `RUST_LOG` | Rust 日志级别 | `info` |
-| `PORT` | 前端端口 | `4321` |
+| `PORT` | 前端内部端口 | `4321` |
+| `RATE_LIMIT_MAX` | 速率限制（请求数/分钟） | `10` |
+| `RATE_LIMIT_WINDOW` | 速率窗口（毫秒） | `60000` |
+
+**默认端口配置**：
+- **前端外部端口**: `38702` (映射到容器内 4321)
+- **API 外部端口**: `38701` (映射到容器内 3001)
 
 ---
 

@@ -72,16 +72,16 @@ cd /opt/snatch/snatch-rs
 cargo build --release
 ./target/release/snatch-rs
 
-# 或使用 Docker
+# 或使用 Docker（推荐使用项目端口配置）
 docker build -t snatch-rs .
-docker run -d -p 3001:3001 --name snatch-api snatch-rs
+docker run -d -p 38701:3001 --name snatch-api snatch-rs
 
 # 3. 验证 API 运行
-curl http://localhost:3001/health
+curl http://localhost:38701/health
 # 预期响应: "OK"
 ```
 
-**确保 Rust API 监听在 localhost:3001 或 0.0.0.0:3001**
+**确保 Rust API 监听在 localhost:3001（内部）或 0.0.0.0:3001**
 
 ### 第二步：安装和配置 Cloudflare Tunnel
 
@@ -120,10 +120,10 @@ credentials-file: /home/user/.cloudflared/xxxxxxxxxxxx.json
 ingress:
   # 将 Tunnel 的公网地址路由到本地 Rust API
   - hostname: snatch-api.your-domain.com
-    service: http://localhost:3001
+    service: http://localhost:3001  # Docker 内部端口
 
-  # 或者不使用域名，直接使用 Tunnel URL
-  # service: http://localhost:3001
+  # 如果使用 Docker 端口映射，也可以用:
+  # service: http://localhost:38701
 
   # 抓取所有其他流量返回 404
   - service: http_status:404
@@ -397,9 +397,15 @@ RUST_API_URL = "https://xxxxxxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.cfargotunnel.co
 ### Rust API 服务器
 
 ```bash
-# 无需额外配置，监听 localhost:3001 即可
-# 如果需要 CORS，在启动时设置：
+# Docker 方式（推荐）
+docker run -d -p 38701:3001 \
+  -e ALLOWED_ORIGINS=https://your-pages.dev,https://your-domain.com \
+  --name snatch-api snatch-rs
+
+# 或本地运行
 export ALLOWED_ORIGINS=https://your-pages.dev,https://your-domain.com
+./target/release/snatch-rs
+# 监听在 localhost:3001
 ```
 
 ---

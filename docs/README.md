@@ -78,8 +78,9 @@ snatch/
 ## API 文档
 
 ### Base URL
-- 开发环境: `http://localhost:3001`
+- 开发环境: `http://localhost:38701` (Docker) 或 `http://localhost:3001` (本地)
 - 生产环境: 通过 `RUST_API_URL` 环境变量配置
+- Docker 内部: `http://api:3001` (容器间通信)
 
 ### 端点
 
@@ -215,7 +216,8 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
                               │ HTTPS Request
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                      Astro 前端 (端口 4321)                     │
+│                   Astro 前端 (外部端口: 38702)                 │
+│                   (内部端口: 4321)                            │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  pages/api/download.ts                                     │ │
 │  │  - 限流检查 (持久化到 data/rate-limits.json)              │ │
@@ -225,10 +227,11 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
-                              │ HTTP Request
+                              │ HTTP Request (Docker 内部网络)
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Rust API (端口 3001)                         │
+│                  Rust API (外部端口: 38701)                   │
+│                  (内部端口: 3001)                              │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  handlers.rs                                               │ │
 │  │  - URL 验证 (完整安全检查)                                  │ │
@@ -291,16 +294,43 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 
 ### 本地运行
 
-```bash
-# 启动前端
-bun dev
+**完整 Docker 环境**（推荐）：
 
-# 启动后端
+```bash
+# 启动所有服务（前端 + API）
+docker compose up -d --build
+
+# 访问
+open http://localhost:38702
+```
+
+**开发模式（前端本地 + API Docker）**：
+
+```bash
+# Terminal 1: 启动 API (Docker)
+docker compose up api -d
+
+# Terminal 2: 启动前端 (本地)
+# 设置环境变量
+echo "RUST_API_URL=http://localhost:38701" > .env
+
+# 启动开发服务器
+bun dev
+# 访问 http://localhost:4321
+```
+
+**完全本地运行**：
+
+```bash
+# Terminal 1: 启动后端
 cd snatch-rs
 cargo run
+# 监听在 http://localhost:3001
 
-# 或使用 Docker
-docker compose up
+# Terminal 2: 启动前端
+echo "RUST_API_URL=http://localhost:3001" > .env
+bun dev
+# 访问 http://localhost:4321
 ```
 
 ### 测试
