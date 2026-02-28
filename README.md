@@ -1,13 +1,14 @@
-# Snatch
+# Snatch Backend
 
-A fast, lightweight social media video downloader powered by Rust + yt-dlp.
+High-performance social media video downloader API - Built with Rust + yt-dlp.
 
 ## Features
 
-- 🚀 **Fast** - Rust backend with yt-dlp for efficient downloads
-- 🎯 **Simple** - Just paste a URL and click download
-- 🔒 **Private** - No data stored, no accounts required
-- 🐳 **Docker Ready** - One-command deployment
+- 🚀 **Fast** - Rust-powered with Axum framework
+- 📦 **All-in-One** - Includes yt-dlp for media extraction
+- 🔒 **Secure** - Built-in rate limiting and CORS protection
+- 🐳 **Docker Ready** - Single container deployment
+- 📊 **Cached** - Smart caching with TTL support
 
 ## Supported Platforms
 
@@ -19,164 +20,192 @@ A fast, lightweight social media video downloader powered by Rust + yt-dlp.
 
 ## Quick Start
 
-### Development
+### Using Docker (Recommended)
 
 ```bash
-# Install dependencies
-bun install
+# Build image
+docker build -t snatch-backend snatch-rs/
 
-# Start API (Docker)
-docker compose up api -d
+# Run container
+docker run -d \
+  --name snatch-backend \
+  -p 38701:3001 \
+  -e ALLOWED_ORIGINS=https://your-frontend.com \
+  --restart always \
+  snatch-backend
 
-# Start frontend
-bun dev
+# Check health
+curl http://localhost:38701/health
 ```
 
-### Production
+### Docker Compose
 
-#### Option 1: Cloudflare Pages + Docker Backend ⭐ (Recommended)
+Create `docker-compose.yml`:
 
-**Frontend on Cloudflare Pages, Backend on Docker**
-
-```bash
-# Backend: Start API with Docker
-git clone <your-repo-url>
-cd snatch
-docker compose up api -d --build
-# Or configure Cloudflare Tunnel for secure access
-
-# Frontend: Deploy to Cloudflare Pages
-# 1. Configure environment variables in Cloudflare dashboard:
-#    RUST_API_URL=https://your-api-domain.com
-# 2. Switch to Cloudflare adapter:
-cp astro.config.cloudflare.mjs astro.config.mjs
-# 3. Connect Git repo and deploy
+```yaml
+services:
+  api:
+    build:
+      context: .
+      dockerfile: snatch-rs/Dockerfile
+    container_name: snatch-backend
+    ports:
+      - "38701:3001"
+    environment:
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - RUST_LOG=${RUST_LOG:-info}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-10}
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 ```
 
-**See [DEPLOY.md](./DEPLOY.md#方案-bcloudflare-pages--docker-后端推荐) for detailed instructions.**
-
-#### Option 2: Docker Compose (Complete Setup)
+Then run:
 
 ```bash
-# Clone and enter directory
-git clone <your-repo-url>
-cd snatch
+# Create .env from example
+cp .env.example .env
 
-# Configure environment
-cp .env.production.example .env
-# Edit .env and set your domain
+# Edit .env and configure ALLOWED_ORIGINS
 
-# Deploy
+# Start service
 docker compose up -d --build
 ```
 
-#### Option 3: With Nginx Reverse Proxy
+### Local Development (Requires Rust)
 
 ```bash
-# 1. Deploy with Docker Compose
-docker compose up -d --build
+# Install Rust
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
-# 2. Install Nginx and Certbot
-sudo apt update
-sudo apt install nginx certbot python3-certbot-nginx
+# Install yt-dlp
+pip install yt-dlp
+# or
+brew install yt-dlp
 
-# 3. Copy Nginx config
-sudo cp nginx.conf.example /etc/nginx/sites-available/snatch
-# Edit the file and replace 'your-domain.com'
-
-# 4. Enable site and get SSL certificate
-sudo ln -s /etc/nginx/sites-available/snatch /etc/nginx/sites-enabled/
-sudo certbot --nginx -d your-domain.com
-
-# 5. Restart Nginx
-sudo systemctl restart nginx
+# Run
+cd snatch-rs
+cargo run --release
 ```
 
-#### Option 4: One-Click Deployment Script
+## API Endpoints
 
+### Health Check
 ```bash
-chmod +x deploy.sh
-./deploy.sh
+GET /health
+Response: "OK"
 ```
+
+### Extract Video Info
+```bash
+POST /api/extract
+Content-Type: application/json
+
+{
+  "url": "https://www.tiktok.com/@user/video/123"
+}
+
+Response:
+{
+  "success": true,
+  "platform": "tiktok",
+  "title": "Video Title",
+  "thumbnail": "https://...",
+  "formats": [
+    {
+      "format_id": "0",
+      "ext": "mp4",
+      "quality": "720p",
+      "url": "https://...",
+      "size": 12345678
+    }
+  ]
+}
+```
+
+See [docs/API.md](./docs/API.md) for full API documentation.
+
+## Environment Variables
+
+| Variable | Description | Default | Production |
+|----------|-------------|---------|------------|
+| `ALLOWED_ORIGINS` | CORS allowed origins | All origins | Set to your frontend domain |
+| `RUST_LOG` | Log level | `info` | `info` or `warn` |
+| `PORT` | Server port | `3001` | `3001` |
+| `RATE_LIMIT_MAX` | Requests per minute | `10` | `10` |
+| `RATE_LIMIT_WINDOW` | Rate window (ms) | `60000` | `60000` |
+
+## Nginx Reverse Proxy
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name api.your-domain.com;
+
+    ssl_certificate /etc/letsencrypt/live/api.your-domain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/api.your-domain.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:38701;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+## Tech Stack
+
+- **Language**: Rust
+- **Framework**: Axum (Tokio)
+- **Downloader**: yt-dlp
+- **Deployment**: Docker
 
 ## Project Structure
 
 ```
 snatch/
-├── src/                    # Astro frontend
-│   ├── components/         # React components
-│   ├── pages/              # Pages & API routes
-│   ├── lib/                # Utilities
-│   └── styles.css          # Global styles
-├── snatch-rs/              # Rust API backend
-│   └── src/                # Rust source
-├── docker-compose.yml      # Docker orchestration
-├── Dockerfile              # Frontend container
-└── docs/                   # Documentation
-    └── API.md              # API documentation
+├── snatch-rs/
+│   ├── src/
+│   │   ├── main.rs      # Entry point
+│   │   ├── handlers.rs  # API endpoints
+│   │   ├── models.rs    # Data models
+│   │   ├── cache.rs     # Caching logic
+│   │   ├── extractor.rs # yt-dlp integration
+│   │   ├── validation.rs # URL validation
+│   │   └── retry.rs     # Retry logic
+│   ├── Cargo.toml
+│   └── Dockerfile
+└── docs/
+    └── API.md           # API documentation
 ```
 
-## Architecture
+## Security
 
-```
-┌─────────────────┐     ┌─────────────────┐
-│  Astro Frontend │────▶│  Rust API       │
-│  (SSR + Bun)    │     │  (snatch-rs)    │
-│  Port: 4321     │     │  Port: 3001     │
-└─────────────────┘     └─────────────────┘
-```
+- **CORS**: Configure `ALLOWED_ORIGINS` in production
+- **Rate Limiting**: Default 10 requests/minute per IP
+- **Input Validation**: URL sanitization and pattern matching
+- **No Data Storage**: No logs or user data persisted
 
-## Tech Stack
-
-- **Frontend**: Astro + React + Tailwind CSS v4
-- **Backend**: Rust (Axum) + yt-dlp
-- **Package Manager**: Bun
-- **Deploy**: Docker Compose
-
-## Scripts
+## Monitoring
 
 ```bash
-bun dev       # Start development server
-bun build     # Build for production
-bun test      # Run tests
-bun lint      # Lint and fix code
+# View logs
+docker logs -f snatch-backend
+
+# Check health
+curl http://localhost:38701/health
 ```
 
-## Documentation
+## Frontend
 
-- [API Documentation](./docs/API.md)
-- [Deployment Guide](./DEPLOY.md)
-- [Cloudflare Pages + Docker Deployment](./CLOUDFLARE.md) ⭐
-
-## Environment Variables
-
-Copy `.env.production.example` to `.env` and configure:
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `RUST_API_URL` | Rust API service URL | `http://api:3001` |
-| `ALLOWED_ORIGINS` | CORS allowed origins (production) | (empty) |
-| `RUST_LOG` | Log level (error/warn/info/debug) | `info` |
-| `PORT` | Frontend port (internal) | `4321` |
-| `RATE_LIMIT_MAX` | Max requests per minute | `10` |
-
-**Note**: Default exposed ports are **38702** (frontend) and **38701** (API).
-
-## Deployment Checklist
-
-- [ ] Copy `.env.production.example` to `.env`
-- [ ] Set `ALLOWED_ORIGINS` to your domain
-- [ ] Configure firewall (open ports 80, 443)
-- [ ] Set up Nginx reverse proxy (optional but recommended)
-- [ ] Obtain SSL certificate with Let's Encrypt
-- [ ] Test health endpoints: `/health` and API `/api/health`
-
-## Production Tips
-
-1. **Security**: Always use HTTPS and set `ALLOWED_ORIGINS`
-2. **Monitoring**: Check logs with `docker compose logs -f`
-3. **Updates**: Update with `git pull && docker compose up -d --build`
-4. **Backups**: No persistent data needed, but keep config files backed up
+This API is designed to work with the [Snatch Frontend](https://github.com/youming-ai/snatch-frontend).
 
 ## License
 

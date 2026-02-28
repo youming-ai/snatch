@@ -1,75 +1,29 @@
-# Snatch - Docker Compose Configuration
-# Usage: docker compose up -d --build
-
 services:
-  # Astro Frontend (SSR)
-  frontend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      target: runtime
-    ports:
-      - "38702:4321"
-    environment:
-      - RUST_API_URL=http://api:3001
-      - HOST=0.0.0.0
-      - PORT=4321
-      - NODE_ENV=production
-      - RATE_LIMIT_DB_PATH=/app/data/rate-limits.json
-      - PUBLIC_RATE_LIMIT_MAX=10
-      - PUBLIC_RATE_LIMIT_WINDOW=60000
-    depends_on:
-      api:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - snatch-network
-    volumes:
-      - snatch-data:/app/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4321"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-        reservations:
-          memory: 128M
-
-  # Rust API (snatch-rs)
   api:
     build:
-      context: ./snatch-rs
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: snatch-rs/Dockerfile
+    container_name: snatch-backend
     ports:
       - "38701:3001"
     environment:
-      - RUST_LOG=info
-      # Production: uncomment and set your domain
-      # - ALLOWED_ORIGINS=https://your-domain.com,https://www.your-domain.com
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - RUST_LOG=${RUST_LOG:-info}
+      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-10}
     restart: unless-stopped
-    networks:
-      - snatch-network
+    volumes:
+      - ./data:/app/data
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
       start_period: 10s
     deploy:
       resources:
         limits:
+          cpus: '1'
           memory: 512M
         reservations:
+          cpus: '0.25'
           memory: 128M
-
-networks:
-  snatch-network:
-    driver: bridge
-
-volumes:
-  snatch-data:
-    driver: local

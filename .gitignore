@@ -1,13 +1,3 @@
-# Dependencies
-node_modules/
-.pnpm-store/
-
-# Build outputs
-dist/
-build/
-.output/
-.astro/
-
 # Rust build outputs
 snatch-rs/target/
 
@@ -21,13 +11,8 @@ Thumbs.db
 
 # Logs
 *.log
-npm-debug.log*
-yarn-debug.log*
-pnpm-debug.log*
-bun-debug.log*
 
 # Runtime data
-*.tsbuildinfo
 data/
 
 # Environment files
@@ -37,10 +22,6 @@ data/
 !.env.example
 
 # Application specific
-.wrangler
 uploads/
 downloads/
 secrets.json
-
-# Project scaffolding
-.cta.json
