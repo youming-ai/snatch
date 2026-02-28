@@ -128,7 +128,176 @@ server {
 
 ---
 
-## 方案 B：Docker Compose 一键部署（推荐）
+## 方案 B：Cloudflare Pages + Docker 后端（推荐）
+
+**适合**: 希望前端全球加速，后端自控制的场景
+
+### 架构
+
+```
+┌─────────────────────────────────────────────┐
+│         用户浏览器                             │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────┐
+│      Cloudflare Pages (前端)                 │
+│  - 全球 CDN 分发                             │
+│  - 自动 HTTPS                               │
+│  - 持续部署                                  │
+│  - Astro SSR                                │
+└──────────────────┬──────────────────────────┘
+                   │
+                   │ HTTPS
+                   ▼
+┌─────────────────────────────────────────────┐
+│         Cloudflare Tunnel (可选)            │
+│      或直接连接                              │
+└──────────────────┬──────────────────────────┘
+                   │
+                   ▼
+┌─────────────────────────────────────────────┐
+│        Docker 容器 (Rust API)               │
+│  - VPS / 本地机器                           │
+│  - 端口: 38701                               │
+└─────────────────────────────────────────────┘
+```
+
+### 优点
+
+| 特性 | 说明 |
+|------|------|
+| **全球加速** | Cloudflare 300+ 节点自动分发 |
+| **零成本前端** | Pages 免费套餐 |
+| **DDoS 防护** | Cloudflare 自动防御 |
+| **后端可控** | 完全控制 Rust API 服务 |
+| **灵活部署** | 后端可在 VPS 或本地运行 |
+| **自动 HTTPS** | 免费 SSL 证书 |
+
+### 部署步骤
+
+#### 1. 准备后端（Docker）
+
+在你的 VPS 或本地机器上：
+
+```bash
+# 克隆项目
+git clone <your-repo> /opt/snatch
+cd /opt/snatch
+
+# 只启动 API 服务
+docker compose up api -d --build
+
+# 验证 API 运行
+curl http://localhost:38701/health
+# 预期响应: OK
+```
+
+**如果通过公网访问，需要配置端口转发或使用 Cloudflare Tunnel**：
+
+```bash
+# 选项 A: 直接暴露端口（需配置防火墙）
+# API 将在 http://YOUR-VPS-IP:38701
+
+# 选项 B: 使用 Cloudflare Tunnel（推荐）
+# 安装 cloudflared
+wget https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+sudo dpkg -i cloudflared-linux-amd64.deb
+
+# 登录并创建 tunnel
+cloudflared tunnel login
+cloudflared tunnel create snatch-api
+
+# 配置 ~/.cloudflared/config.yml
+tunnel: YOUR_TUNNEL_ID
+credentials-file: /home/user/.cloudflared/YOUR_CREDENTIALS.json
+
+ingress:
+  - hostname: api.your-domain.com
+    service: http://localhost:38701
+  - service: http_status:404
+
+# 启动 tunnel
+cloudflared tunnel run snatch-api
+```
+
+#### 2. 配置前端环境变量
+
+在 Cloudflare Pages 控制台设置环境变量：
+
+**Settings > Environment variables**:
+
+```bash
+RUST_API_URL=https://api.your-domain.com
+# 或使用 Tunnel URL:
+# RUST_API_URL=https://your-tunnel-id.cfargotunnel.com
+```
+
+**或者创建 `.env.production` 文件**：
+
+```bash
+# 项目根目录
+echo "RUST_API_URL=https://api.your-domain.com" > .env.production
+```
+
+#### 3. 配置 Astro 使用 Cloudflare 适配器
+
+```bash
+# 备份当前配置
+cp astro.config.mjs astro.config.node.mjs
+
+# 使用 Cloudflare 配置
+cp astro.config.cloudflare.mjs astro.config.mjs
+```
+
+#### 4. 部署到 Cloudflare Pages
+
+**方式 1: 通过 Git 集成（推荐）**
+
+```bash
+git add .
+git commit -m "chore: configure for Cloudflare Pages deployment"
+git push origin main
+```
+
+然后在 Cloudflare Pages 控制台：
+1. 连接 Git 仓库
+2. 设置构建命令：`bun run build`
+3. 设置输出目录：`dist`
+4. 启用自动部署
+
+**方式 2: 手动部署**
+
+```bash
+# 构建前端
+bun run build
+
+# 使用 Wrangler 部署
+bunx wrangler pages deploy dist --project-name=snatch
+```
+
+### 配置自定义域名
+
+1. 在 Cloudflare Pages 项目设置中添加自定义域名
+2. 在 Cloudflare DNS 中添加 CNAME 记录指向 Pages 项目
+3. Cloudflare 会自动获取 SSL 证书
+
+### 更新部署
+
+```bash
+# 前端更新
+git push
+# Cloudflare Pages 自动构建和部署
+
+# 后端更新
+cd /opt/snatch
+git pull
+docker compose up -d --build api
+```
+
+---
+
+## 方案 C：Docker Compose 一键部署（推荐）
 
 **适合**: 生产环境、易于维护
 
@@ -180,7 +349,7 @@ services:
 
 ---
 
-## 方案 C：前后端分离部署
+## 方案 D：Docker Compose 完整部署
 
 **适合**: 高流量、需要弹性扩展
 
@@ -214,8 +383,9 @@ RUST_API_URL=https://your-api.fly.dev
 | 方案 | 服务 | 月费用 |
 |------|------|--------|
 | A | Vultr/DigitalOcean VPS (1GB) | $5-6 |
-| B | 同上 | $5-6 |
-| C | Vercel (前端) + Fly.io (后端) | $0 (免费层) |
+| B | Cloudflare Pages (免费) + VPS | $5-6 |
+| C | 同上 | $5-6 |
+| D | 同上 | $5-6 |
 
 ---
 
@@ -224,8 +394,9 @@ RUST_API_URL=https://your-api.fly.dev
 | 场景 | 推荐方案 |
 |------|----------|
 | 个人使用 | 方案 A (单 VPS) |
-| 团队/生产 | 方案 B (Docker Compose) |
-| 高流量/弹性 | 方案 C (前后端分离) |
+| 全球加速 + 后端可控 | 方案 B (Cloudflare Pages + Docker) ⭐ |
+| 团队/生产 | 方案 C (Docker Compose) |
+| 完全容器化 | 方案 D (Docker Compose 完整部署) |
 
 ---
 

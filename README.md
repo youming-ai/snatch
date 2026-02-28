@@ -34,7 +34,28 @@ bun dev
 
 ### Production
 
-#### Option 1: Docker Compose (Recommended)
+#### Option 1: Cloudflare Pages + Docker Backend ⭐ (Recommended)
+
+**Frontend on Cloudflare Pages, Backend on Docker**
+
+```bash
+# Backend: Start API with Docker
+git clone <your-repo-url>
+cd snatch
+docker compose up api -d --build
+# Or configure Cloudflare Tunnel for secure access
+
+# Frontend: Deploy to Cloudflare Pages
+# 1. Configure environment variables in Cloudflare dashboard:
+#    RUST_API_URL=https://your-api-domain.com
+# 2. Switch to Cloudflare adapter:
+cp astro.config.cloudflare.mjs astro.config.mjs
+# 3. Connect Git repo and deploy
+```
+
+**See [DEPLOY.md](./DEPLOY.md#方案-bcloudflare-pages--docker-后端推荐) for detailed instructions.**
+
+#### Option 2: Docker Compose (Complete Setup)
 
 ```bash
 # Clone and enter directory
@@ -49,7 +70,7 @@ cp .env.production.example .env
 docker compose up -d --build
 ```
 
-#### Option 2: With Nginx Reverse Proxy
+#### Option 3: With Nginx Reverse Proxy
 
 ```bash
 # 1. Deploy with Docker Compose
@@ -71,7 +92,7 @@ sudo certbot --nginx -d your-domain.com
 sudo systemctl restart nginx
 ```
 
-#### Option 3: One-Click Deployment Script
+#### Option 4: One-Click Deployment Script
 
 ```bash
 chmod +x deploy.sh
@@ -125,6 +146,7 @@ bun lint      # Lint and fix code
 
 - [API Documentation](./docs/API.md)
 - [Deployment Guide](./DEPLOY.md)
+- [Cloudflare Pages + Docker Deployment](./CLOUDFLARE.md) ⭐
 
 ## Environment Variables
 

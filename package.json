@@ -10,6 +10,7 @@
     "prepare": "husky install"
   },
   "dependencies": {
+    "@astrojs/cloudflare": "^12.6.12",
     "@astrojs/node": "^9.5.1",
     "@astrojs/react": "^4.4.2",
     "@tailwindcss/vite": "^4.0.6",
