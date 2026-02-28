@@ -17,7 +17,7 @@ pub struct VideoFormat {
 }
 
 /// Successful extraction response
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Clone)]
 pub struct ExtractResponse {
     pub success: bool,
     pub platform: String,
