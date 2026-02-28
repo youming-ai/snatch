@@ -115,8 +115,12 @@ where
 
     /// Evict the oldest entry from the cache
     fn evict_oldest(&mut self) {
-        if let Some((&key, _)) = self.data.iter().min_by_key(|(_, entry)| entry.expires_at) {
-            self.data.remove(key);
+        if let Some(key) = self.data
+            .iter()
+            .min_by_key(|(_, entry)| entry.expires_at)
+            .map(|(key, _)| key.clone())
+        {
+            self.data.remove(&key);
         }
     }
 
