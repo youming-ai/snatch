@@ -5,6 +5,8 @@ node_modules/
 # Build outputs
 dist/
 .astro/
+build/
+.output/
 
 # Development files
 *.log
@@ -26,8 +28,9 @@ Thumbs.db
 # Git
 .git/
 .gitignore
+.gitattributes
 
-# Documentation (optional, can keep if needed)
+# Documentation (keep README in image)
 *.md
 !README.md
 
@@ -37,3 +40,13 @@ __tests__/
 *.spec.ts
 vitest.config.ts
 coverage/
+
+# Deployment files (not needed in container)
+nginx.conf.example
+deploy.sh
+docs/
+
+# Misc
+.editorconfig
+.biomerules
+.biomeignore

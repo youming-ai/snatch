@@ -22,19 +22,60 @@ A fast, lightweight social media video downloader powered by Rust + yt-dlp.
 ### Development
 
 ```bash
+# Install dependencies
+bun install
+
 # Start API (Docker)
 docker compose up api -d
 
 # Start frontend
-bun install
 bun dev
 ```
 
 ### Production
 
+#### Option 1: Docker Compose (Recommended)
+
 ```bash
-# One-command deployment
+# Clone and enter directory
+git clone <your-repo-url>
+cd snatch
+
+# Configure environment
+cp .env.production.example .env
+# Edit .env and set your domain
+
+# Deploy
 docker compose up -d --build
+```
+
+#### Option 2: With Nginx Reverse Proxy
+
+```bash
+# 1. Deploy with Docker Compose
+docker compose up -d --build
+
+# 2. Install Nginx and Certbot
+sudo apt update
+sudo apt install nginx certbot python3-certbot-nginx
+
+# 3. Copy Nginx config
+sudo cp nginx.conf.example /etc/nginx/sites-available/snatch
+# Edit the file and replace 'your-domain.com'
+
+# 4. Enable site and get SSL certificate
+sudo ln -s /etc/nginx/sites-available/snatch /etc/nginx/sites-enabled/
+sudo certbot --nginx -d your-domain.com
+
+# 5. Restart Nginx
+sudo systemctl restart nginx
+```
+
+#### Option 3: One-Click Deployment Script
+
+```bash
+chmod +x deploy.sh
+./deploy.sh
 ```
 
 ## Project Structure
@@ -84,6 +125,36 @@ bun lint      # Lint and fix code
 
 - [API Documentation](./docs/API.md)
 - [Deployment Guide](./DEPLOY.md)
+
+## Environment Variables
+
+Copy `.env.production.example` to `.env` and configure:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `RUST_API_URL` | Rust API service URL | `http://api:3001` |
+| `ALLOWED_ORIGINS` | CORS allowed origins (production) | (empty) |
+| `RUST_LOG` | Log level (error/warn/info/debug) | `info` |
+| `PORT` | Frontend port (internal) | `4321` |
+| `RATE_LIMIT_MAX` | Max requests per minute | `10` |
+
+**Note**: Default exposed ports are **38702** (frontend) and **38701** (API).
+
+## Deployment Checklist
+
+- [ ] Copy `.env.production.example` to `.env`
+- [ ] Set `ALLOWED_ORIGINS` to your domain
+- [ ] Configure firewall (open ports 80, 443)
+- [ ] Set up Nginx reverse proxy (optional but recommended)
+- [ ] Obtain SSL certificate with Let's Encrypt
+- [ ] Test health endpoints: `/health` and API `/api/health`
+
+## Production Tips
+
+1. **Security**: Always use HTTPS and set `ALLOWED_ORIGINS`
+2. **Monitoring**: Check logs with `docker compose logs -f`
+3. **Updates**: Update with `git pull && docker compose up -d --build`
+4. **Backups**: No persistent data needed, but keep config files backed up
 
 ## License
 
