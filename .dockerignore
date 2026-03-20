@@ -7,6 +7,10 @@ dist/
 .astro/
 build/
 .output/
+apps/api/target/
+
+# Frontend (not needed for API Docker build)
+apps/web/
 
 # Development files
 *.log
@@ -30,7 +34,8 @@ Thumbs.db
 .gitignore
 .gitattributes
 
-# Documentation (keep README in image)
+# Documentation
+docs/
 *.md
 !README.md
 
@@ -38,15 +43,8 @@ Thumbs.db
 __tests__/
 *.test.ts
 *.spec.ts
-vitest.config.ts
 coverage/
-
-# Deployment files (not needed in container)
-nginx.conf.example
-deploy.sh
-docs/
 
 # Misc
 .editorconfig
-.biomerules
-.biomeignore
+bun.lock

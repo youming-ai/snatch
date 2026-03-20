@@ -4,73 +4,64 @@
 
 ```
 snatch/
-├── src/                              # Astro 前端 (SSR)
-│   ├── components/                   # React 组件
-│   │   ├── DownloaderApp.tsx        # 主应用组件
-│   │   ├── DownloaderInput.tsx      # URL 输入组件
-│   │   ├── DownloadResult.tsx       # 下载结果展示组件
-│   │   └── ErrorBoundary.tsx        # React 错误边界
+├── apps/
+│   ├── api/                              # Rust 后端
+│   │   └── src/
+│   │       ├── main.rs                   # 入口点 + 路由 + 中间件
+│   │       ├── handlers.rs               # HTTP 处理器 + 测试
+│   │       ├── extractor.rs              # yt-dlp 集成 + 超时
+│   │       ├── models.rs                 # 数据模型
+│   │       ├── validation.rs             # URL 验证模块 + 测试
+│   │       ├── retry.rs                  # 重试逻辑 + 测试
+│   │       └── cache.rs                  # LRU 缓存 + 测试
+│   │   ├── Cargo.toml                    # Rust 依赖
+│   │   └── Dockerfile                    # Rust Docker 镜像
 │   │
-│   ├── lib/                          # 工具库
-│   │   ├── validation.ts            # URL 验证
-│   │   ├── validation.test.ts       # 验证测试
-│   │   └── rate-limiter.ts          # 持久化限流器
-│   │
-│   ├── middleware/                   # API 中间件
-│   │   ├── security.ts              # 安全检查 (限流、验证、清理)
-│   │   └── security.test.ts         # 安全测试
-│   │
-│   ├── pages/                        # Astro 页面
-│   │   ├── index.astro              # 首页
-│   │   └── api/                     # API 路由
-│   │       └── download.ts          # 下载 API 代理
-│   │
-│   ├── config/                       # 配置
-│   │   └── env.ts                   # 环境变量配置
-│   │
-│   ├── types/                        # TypeScript 类型
-│   │   └── download.ts              # 下载相关类型定义
-│   │
-│   ├── constants/                    # 常量
-│   │   └── platforms.ts             # 支持的平台配置
-│   │
-│   ├── test/                         # 测试配置
-│   │   └── setup.ts                 # Vitest 设置
-│   │
-│   ├── styles.css                    # 全局样式
-│   └── logo.svg                      # 应用 Logo
+│   └── web/                              # Astro 前端 (SSR)
+│       ├── src/
+│       │   ├── components/               # React 组件
+│       │   │   ├── DownloaderApp.tsx      # 主应用组件
+│       │   │   ├── DownloaderInput.tsx    # URL 输入组件
+│       │   │   ├── DownloadResult.tsx     # 下载结果展示组件
+│       │   │   └── ErrorBoundary.tsx      # React 错误边界
+│       │   │
+│       │   ├── lib/                      # 工具库
+│       │   │   ├── validation.ts         # URL 验证
+│       │   │   ├── validation.test.ts    # 验证测试
+│       │   │   └── rate-limiter.ts       # 持久化限流器
+│       │   │
+│       │   ├── middleware/               # API 中间件
+│       │   │   ├── security.ts           # 安全检查 (限流、验证、清理)
+│       │   │   └── security.test.ts      # 安全测试
+│       │   │
+│       │   ├── pages/                    # Astro 页面
+│       │   │   └── index.astro           # 首页
+│       │   │
+│       │   ├── config/                   # 配置
+│       │   │   └── env.ts                # 环境变量配置
+│       │   │
+│       │   ├── types/                    # TypeScript 类型
+│       │   │   └── download.ts           # 下载相关类型定义
+│       │   │
+│       │   ├── constants/                # 常量
+│       │   │   └── platforms.ts          # 支持的平台配置
+│       │   │
+│       │   └── styles.css                # 全局样式
+│       │
+│       ├── public/                       # 静态资源
+│       ├── package.json                  # Web 依赖 (@snatch/web)
+│       ├── astro.config.mjs              # Astro 配置
+│       └── tsconfig.json                 # TypeScript 配置
 │
-├── snatch-rs/                        # Rust 后端
-│   └── src/                          # Rust 源代码
-│       ├── main.rs                   # 入口点 + 路由 + 中间件
-│       ├── handlers.rs               # HTTP 处理器 + 测试
-│       ├── extractor.rs              # yt-dlp 集成 + 超时
-│       ├── models.rs                 # 数据模型
-│       ├── validation.rs             # URL 验证模块 + 测试
-│       ├── retry.rs                  # 重试逻辑 + 测试
-│       └── cache.rs                  # LRU 缓存 + 测试
-│   ├── Cargo.toml                    # Rust 依赖
-│   └── Dockerfile                    # Rust Docker 镜像
+├── docs/                                 # 文档目录
+│   └── README.md                         # 项目文档
 │
-├── docs/                             # 文档目录
-│   ├── README.md                      # 项目文档
-│   └── CLOUDFLARE_DEPLOYMENT.md      # Cloudflare 部署方案
-│
-├── data/                             # 运行时数据 (已忽略)
-│   └── rate-limits.json              # 限流数据持久化
-│
-├── .husky/                           # Git hooks
-│   └── pre-commit                    # Biome 检查
-│
-├── .gitignore                        # Git 忽略规则
-├── .dockerignore                     # Docker 构建忽略
-├── biome.json                        # Biome 配置
-├── docker-compose.yml                # Docker Compose 配置
-├── Dockerfile                        # 前端 Docker 镜像
-├── package.json                      # Node 依赖
-├── bun.lockb                         # Bun lockfile
-├── vitest.config.ts                  # Vitest 配置
-└── tsconfig.json                     # TypeScript 配置
+├── data/                                 # 运行时数据 (已忽略)
+├── .gitignore                            # Git 忽略规则
+├── .dockerignore                         # Docker 构建忽略
+├── docker-compose.yml                    # Docker Compose 配置
+├── package.json                          # Bun workspace root
+└── bun.lock                              # Bun lockfile
 ```
 
 ---
@@ -182,7 +173,6 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 | React | ^19.2.0 | UI 组件 |
 | TailwindCSS | ^4.0.6 | 样式 |
 | lucide-react | ^0.544.0 | 图标 |
-| @astrojs/node | ^9.5.1 | Node 适配器 |
 | @astrojs/react | ^4.4.2 | React 集成 |
 
 ### 后端 (Rust)
@@ -199,7 +189,7 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 | 工具 | 用途 |
 |------|------|
 | Docker | 容器化 |
-| Bun | 包管理器 |
+| Bun | 包管理器 + Monorepo |
 | Husky | Git hooks |
 | Biome | 代码格式化 |
 
@@ -216,8 +206,8 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
                               │ HTTPS Request
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                   Astro 前端 (外部端口: 38702)                 │
-│                   (内部端口: 4321)                            │
+│               Astro 前端 (apps/web)                             │
+│               开发端口: 4321 | Docker 端口: 38702               │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  pages/api/download.ts                                     │ │
 │  │  - 限流检查 (持久化到 data/rate-limits.json)              │ │
@@ -227,11 +217,11 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────┬───────────────────────────────────┘
                               │
-                              │ HTTP Request (Docker 内部网络)
+                              │ HTTP Request
                               ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Rust API (外部端口: 38701)                   │
-│                  (内部端口: 3001)                              │
+│               Rust API (apps/api)                               │
+│               内部端口: 3001 | Docker 端口: 38701               │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  handlers.rs                                               │ │
 │  │  - URL 验证 (完整安全检查)                                  │ │
@@ -240,7 +230,6 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 │  └────────────────────────────────────────────────────────────┘ │
 │  ┌────────────────────────────────────────────────────────────┐ │
 │  │  extractor.rs                                              │ │
-│  │  - URL 验证                                                │ │
 │  │  - yt-dlp 超时 (30s)                                       │ │
 │  │  - 重试逻辑 (指数退避,最多3次)                             │ │
 │  │  - 缓存层 (LRU, TTL 5分钟)                                 │ │
@@ -268,15 +257,15 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 
 | 特性 | 实现 | 位置 |
 |------|------|------|
-| 限流 | 持久化文件存储 (10请求/分钟) | `src/lib/rate-limiter.ts` |
-| URL 验证 | 域名白名单 + 危险字符检查 | `snatch-rs/src/validation.rs` |
-| 命令注入防护 | URL 解析验证 | `snatch-rs/src/extractor.rs` |
-| 请求大小限制 | 10KB max | `src/pages/api/download.ts` |
-| 超时保护 | 30s (yt-dlp) + 60s (HTTP) | `snatch-rs/src/extractor.rs` |
-| 重试机制 | 指数退避 (最多3次) | `snatch-rs/src/retry.rs` |
-| 缓存 | LRU + TTL | `snatch-rs/src/cache.rs` |
-| Error Boundary | React 组件级错误捕获 | `src/components/ErrorBoundary.tsx` |
-| CORS | 可配置源 | `snatch-rs/src/main.rs` |
+| 限流 | 持久化文件存储 (10请求/分钟) | `apps/web/src/lib/rate-limiter.ts` |
+| URL 验证 | 域名白名单 + 危险字符检查 | `apps/api/src/validation.rs` |
+| 命令注入防护 | URL 解析验证 | `apps/api/src/extractor.rs` |
+| 请求大小限制 | 10KB max | `apps/web/src/pages/api/download.ts` |
+| 超时保护 | 30s (yt-dlp) + 60s (HTTP) | `apps/api/src/extractor.rs` |
+| 重试机制 | 指数退避 (最多3次) | `apps/api/src/retry.rs` |
+| 缓存 | LRU + TTL | `apps/api/src/cache.rs` |
+| Error Boundary | React 组件级错误捕获 | `apps/web/src/components/ErrorBoundary.tsx` |
+| CORS | 可配置源 | `apps/api/src/main.rs` |
 
 ---
 
@@ -297,11 +286,11 @@ GET /api/download?url=https://www.tiktok.com/@username/video/123
 **完整 Docker 环境**（推荐）：
 
 ```bash
-# 启动所有服务（前端 + API）
+# 启动所有服务
 docker compose up -d --build
 
 # 访问
-open http://localhost:38702
+open http://localhost:38701
 ```
 
 **开发模式（前端本地 + API Docker）**：
@@ -311,10 +300,7 @@ open http://localhost:38702
 docker compose up api -d
 
 # Terminal 2: 启动前端 (本地)
-# 设置环境变量
 echo "RUST_API_URL=http://localhost:38701" > .env
-
-# 启动开发服务器
 bun dev
 # 访问 http://localhost:4321
 ```
@@ -323,7 +309,7 @@ bun dev
 
 ```bash
 # Terminal 1: 启动后端
-cd snatch-rs
+cd apps/api
 cargo run
 # 监听在 http://localhost:3001
 
@@ -340,17 +326,13 @@ bun dev
 bun test
 
 # 后端测试
-cd snatch-rs
-cargo test
-
-# 构建
-bun run build
+cd apps/api && cargo test
 ```
 
 ### 代码检查
 
 ```bash
-# 运行 Biome (Git hooks 自动执行)
+# 运行 Biome
 bunx biome check
 
 # 手动修复

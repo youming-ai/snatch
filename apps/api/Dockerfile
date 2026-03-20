@@ -7,8 +7,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY Cargo.toml Cargo.lock* ./
-COPY src ./src
+COPY apps/api/Cargo.toml apps/api/Cargo.lock* ./
+COPY apps/api/src ./src
 
 RUN cargo build --release
 
@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     python3 \
     python3-pip \
-    curl \
     && pip3 install --break-system-packages yt-dlp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

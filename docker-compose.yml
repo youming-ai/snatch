@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: snatch-rs/Dockerfile
+      dockerfile: apps/api/Dockerfile
     container_name: snatch-backend
     ports:
       - "38701:3001"

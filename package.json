@@ -1,0 +1,18 @@
+{
+  "name": "snatch",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun --filter '@snatch/web' dev",
+    "build": "bun --filter '@snatch/web' build",
+    "preview": "bun --filter '@snatch/web' preview",
+    "test": "bun --filter '@snatch/web' test",
+    "dev:api": "cd apps/api && cargo run",
+    "build:api": "cd apps/api && cargo build --release",
+    "test:api": "cd apps/api && cargo test",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down"
+  }
+}
