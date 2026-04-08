@@ -1,6 +1,5 @@
 # Dependencies
 node_modules/
-.pnpm-store/
 
 # Build outputs
 dist/
@@ -8,8 +7,8 @@ build/
 .output/
 .astro/
 
-# Rust build outputs
-apps/api/target/
+# Rust build outputs (legacy)
+apps/api-rs/target/
 
 # IDE & Editor
 .vscode/

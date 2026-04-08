@@ -6,8 +6,7 @@ interface DownloadResultProps {
 }
 
 export function DownloadResult({ result }: DownloadResultProps) {
-	const TypeIcon =
-		result.type === "video" ? Video : result.type === "image" ? Image : Music;
+	const TypeIcon = result.type === "video" ? Video : result.type === "image" ? Image : Music;
 
 	const handleDownload = () => {
 		if (result.downloadUrl) {

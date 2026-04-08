@@ -1,31 +1,35 @@
-FROM rust:1.83-slim AS builder
-
-# Install build dependencies for OpenSSL
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    pkg-config \
-    libssl-dev \
-    && rm -rf /var/lib/apt/lists/*
-
+FROM oven/bun:1 AS base
 WORKDIR /app
-COPY apps/api/Cargo.toml apps/api/Cargo.lock* ./
-COPY apps/api/src ./src
 
-RUN cargo build --release
-
-FROM debian:bookworm-slim
-
+# Install yt-dlp
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
     python3 \
     python3-pip \
+    ca-certificates \
+    curl \
     && pip3 install --break-system-packages yt-dlp \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app/target/release/snatch-rs /usr/local/bin/
+# Install dependencies
+COPY package.json bun.lock* ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/shared/package.json ./packages/shared/
+RUN bun install --frozen-lockfile
+
+# Copy source
+COPY packages/shared ./packages/shared
+COPY apps/api ./apps/api
+
+# Build shared package (type-check only, no emit)
+WORKDIR /app/packages/shared
+RUN bun run typecheck
+
+# Build API
+WORKDIR /app/apps/api
+RUN bun run build
 
 ENV RUST_LOG=info
 EXPOSE 3001
 
-CMD ["snatch-rs"]
+CMD ["bun", "run", "src/index.ts"]

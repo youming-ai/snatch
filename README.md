@@ -1,6 +1,6 @@
 # Snatch
 
-Social media video downloader — Astro + React frontend with Rust API backend, organized as a Bun monorepo.
+Social media video downloader — Bun monorepo with Hono API and Astro frontend.
 
 ## Supported Platforms
 
@@ -15,31 +15,10 @@ Social media video downloader — Astro + React frontend with Rust API backend, 
 ```
 snatch/
 ├── apps/
-│   ├── api/                # Rust backend (Axum + yt-dlp)
-│   │   ├── src/
-│   │   │   ├── main.rs
-│   │   │   ├── handlers.rs
-│   │   │   ├── models.rs
-│   │   │   ├── cache.rs
-│   │   │   ├── extractor.rs
-│   │   │   ├── validation.rs
-│   │   │   └── retry.rs
-│   │   ├── Cargo.toml
-│   │   └── Dockerfile
-│   │
+│   ├── api/                # Bun + Hono API (yt-dlp)
 │   └── web/                # Astro + React frontend
-│       ├── src/
-│       │   ├── pages/
-│       │   ├── components/
-│       │   ├── lib/
-│       │   ├── middleware/
-│       │   ├── config/
-│       │   ├── types/
-│       │   └── constants/
-│       ├── public/
-│       └── package.json
-│
-├── docs/
+├── packages/
+│   └── shared/             # Shared types, constants, validation
 ├── docker-compose.yml
 ├── package.json            # Bun workspace root
 └── .env.example
@@ -49,11 +28,10 @@ snatch/
 
 ### Prerequisites
 
-- [Bun](https://bun.sh/) (package manager)
-- [Rust](https://www.rust-lang.org/tools/install) (for API, or use Docker)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (for API local dev)
+- [Bun](https://bun.sh/)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (for local API dev)
 
-### Install Dependencies
+### Install
 
 ```bash
 bun install
@@ -61,37 +39,20 @@ bun install
 
 ### Development
 
-**Frontend only** (with Docker API):
-
 ```bash
-# Start API in Docker
-docker compose up api -d
-
-# Start frontend dev server
-bun dev
-# -> http://localhost:4321
-```
-
-**Full local development**:
-
-```bash
-# Terminal 1: Start Rust API
-cd apps/api
-cargo run
+# Terminal 1: Start API
+bun dev:api
 # -> http://localhost:3001
 
 # Terminal 2: Start frontend
-echo "RUST_API_URL=http://localhost:3001" > .env
 bun dev
 # -> http://localhost:4321
 ```
 
-**Full Docker** (production-like):
+### Docker
 
 ```bash
 cp .env.example .env
-# Edit .env as needed
-
 docker compose up -d --build
 # API -> http://localhost:38701
 ```
@@ -99,32 +60,31 @@ docker compose up -d --build
 ### Testing
 
 ```bash
-# Frontend tests
 bun test
+```
 
-# Backend tests
-cd apps/api && cargo test
+### Lint & Format
+
+```bash
+bun run check
 ```
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/extract` | Extract video info (formats, title, thumbnail) |
+| POST | `/api/extract` | Extract video info |
 | GET | `/api/download?url=...` | Stream video download |
 | GET | `/health` | Health check |
-
-See [docs/README.md](./docs/README.md) for full API documentation.
 
 ## Environment Variables
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `RUST_API_URL` | Backend API URL (frontend) | `http://localhost:38701` |
+| `API_URL` | Backend API URL (frontend) | `http://localhost:3001` |
 | `ALLOWED_ORIGINS` | CORS origins (API) | All origins |
 | `PORT` | API server port | `3001` |
-| `RUST_LOG` | Log level | `info` |
-| `RATE_LIMIT_MAX` | Requests per minute | `10` |
+| `RATE_LIMIT_MAX` | Requests per window | `10` |
 | `RATE_LIMIT_WINDOW` | Rate window (ms) | `60000` |
 
 ## Tech Stack
@@ -132,9 +92,9 @@ See [docs/README.md](./docs/README.md) for full API documentation.
 | Layer | Stack |
 |-------|-------|
 | Frontend | Astro 5, React 19, Tailwind CSS 4 |
-| Backend | Rust, Axum, Tokio |
+| API | Bun, Hono |
 | Extraction | yt-dlp |
-| Deployment | Docker, Cloudflare Pages (frontend) |
+| Shared | TypeScript types + validation |
 | Tooling | Bun, Biome, Husky |
 
 ## License

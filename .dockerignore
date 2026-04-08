@@ -1,50 +1,14 @@
-# Dependencies
-node_modules/
-.pnpm-store/
-
-# Build outputs
-dist/
-.astro/
-build/
-.output/
-apps/api/target/
-
-# Frontend (not needed for API Docker build)
-apps/web/
-
-# Development files
-*.log
-*.local
+node_modules
+dist
+.git
+.astro
+.wrangler
 .env
-.env.*
-!.env.example
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
+.env.local
 .DS_Store
-Thumbs.db
-
-# Git
-.git/
-.gitignore
-.gitattributes
-
-# Documentation
-docs/
 *.md
-!README.md
-
-# Tests
-__tests__/
-*.test.ts
-*.spec.ts
-coverage/
-
-# Misc
-.editorconfig
-bun.lock
+apps/web
+apps/api/test
+apps/api-rs
+docs
+data

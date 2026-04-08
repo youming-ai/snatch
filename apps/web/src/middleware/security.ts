@@ -1,152 +1,75 @@
+import { validate } from "@snatch/shared";
 import { getConfig } from "@/config/env";
-import { getRateLimiter } from "@/lib/rate-limiter";
-import { validate } from "@/lib/validation";
 import type { SupportedPlatform } from "@/types/download";
 
-/**
- * Security middleware functions for API requests
- */
+const RATE_LIMIT_MAX = 10;
+const RATE_LIMIT_WINDOW = 60_000;
 
-/**
- * Simple hash function for IP addresses (private helper)
- */
+const requestCounts = new Map<string, { count: number; resetTime: number }>();
+
 function hashString(str: string): string {
 	let hash = 0;
 	for (let i = 0; i < str.length; i++) {
-		const char = str.charCodeAt(i);
-		hash = (hash << 5) - hash + char;
-		hash = hash & hash; // Convert to 32-bit integer
+		hash = (hash << 5) - hash + str.charCodeAt(i);
+		hash = hash & hash;
 	}
 	return Math.abs(hash).toString(16);
 }
 
-/**
- * Rate limiting check - uses persistent rate limiter with in-memory fallback
- */
-export function checkRateLimit(clientId: string): {
-	allowed: boolean;
-	resetTime?: number;
-} {
-	try {
-		const rateLimiter = getRateLimiter();
-		return rateLimiter.check(clientId);
-	} catch (error) {
-		// Fallback to in-memory rate limiting if persistent limiter fails
-		if (import.meta.env.DEV) {
-			console.error("Rate limiter error, using fallback:", error);
-		}
-		return checkRateLimitFallback(clientId);
-	}
-}
-
-/**
- * In-memory fallback rate limiter (used only when persistent limiter fails)
- */
-const requestCounts = new Map<string, { count: number; resetTime: number }>();
-
-function checkRateLimitFallback(clientId: string): {
-	allowed: boolean;
-	resetTime?: number;
-} {
+export function checkRateLimit(clientId: string): { allowed: boolean; resetTime?: number } {
 	const config = getConfig();
+	const max = config.rateLimitMax || RATE_LIMIT_MAX;
+	const window = config.rateLimitWindow || RATE_LIMIT_WINDOW;
 	const now = Date.now();
 	const clientData = requestCounts.get(clientId);
 
 	if (!clientData || now > clientData.resetTime) {
-		requestCounts.set(clientId, {
-			count: 1,
-			resetTime: now + config.rateLimitWindow,
-		});
+		requestCounts.set(clientId, { count: 1, resetTime: now + window });
 		return { allowed: true };
 	}
 
-	if (clientData.count >= config.rateLimitMax) {
-		return {
-			allowed: false,
-			resetTime: clientData.resetTime,
-		};
+	if (clientData.count >= max) {
+		return { allowed: false, resetTime: clientData.resetTime };
 	}
 
 	clientData.count++;
 	return { allowed: true };
 }
 
-/**
- * Generate client ID from request
- */
 export function getClientId(request: Request): string {
-	// Try to get IP from various headers
 	const forwarded = request.headers.get("x-forwarded-for");
 	const realIp = request.headers.get("x-real-ip");
-	const cfConnectingIp = request.headers.get("cf-connecting-ip"); // CF proxy IP
-
-	let ip = realIp || cfConnectingIp || "unknown";
-
-	if (forwarded) {
-		ip = forwarded.split(",")[0].trim();
-	}
-
-	// Hash IP for privacy
+	const ip = realIp || (forwarded ? forwarded.split(",")[0].trim() : "unknown");
 	return hashString(ip);
 }
 
-/**
- * Validate download request
- */
 export function validateDownloadRequest(
 	url: string,
 	userAgent?: string,
-): {
-	valid: boolean;
-	error?: string;
-	platform?: SupportedPlatform;
-} {
-	// Basic URL validation
+): { valid: boolean; error?: string; platform?: SupportedPlatform } {
 	const validation = validate(url);
 	if (!validation.isValid) {
-		return {
-			valid: false,
-			error: validation.errors.join(", "),
-		};
+		return { valid: false, error: validation.errors.join(", ") };
 	}
 
-	// Check user agent (basic bot detection)
 	if (userAgent) {
-		const suspiciousPatterns = [/bot/i, /crawler/i, /spider/i, /scraper/i];
-
-		if (suspiciousPatterns.some((pattern) => pattern.test(userAgent))) {
-			// Only log in development for monitoring
-			if (import.meta.env.DEV) {
-				console.warn("Suspicious user agent detected:", userAgent);
-			}
-			// We don't block, but log for monitoring
+		const suspicious = [/bot/i, /crawler/i, /spider/i, /scraper/i];
+		if (suspicious.some((p) => p.test(userAgent)) && import.meta.env.DEV) {
+			console.warn("Suspicious user agent:", userAgent);
 		}
 	}
 
-	return {
-		valid: true,
-		platform: validation.platform,
-	};
+	return { valid: true, platform: validation.platform };
 }
 
-/**
- * Clean up old rate limit data (fallback cleanup)
- */
-export function cleanupRateLimit(): void {
-	const now = Date.now();
-
-	for (const [clientId, data] of requestCounts.entries()) {
-		if (now > data.resetTime) {
-			requestCounts.delete(clientId);
-		}
-	}
-}
-
-// Cleanup rate limit data every 5 minutes (fallback cleanup)
+// Periodic cleanup
 if (typeof setInterval !== "undefined") {
 	setInterval(
 		() => {
-			cleanupRateLimit();
+			const now = Date.now();
+			for (const [id, data] of requestCounts.entries()) {
+				if (now > data.resetTime) requestCounts.delete(id);
+			}
 		},
 		5 * 60 * 1000,
 	);

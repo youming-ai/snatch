@@ -1,8 +1,8 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { checkRateLimit, validateDownloadRequest } from "./security";
 
 // Mock the config module
-vi.mock("@/config/env", () => ({
+mock.module("@/config/env", () => ({
 	getConfig: () => ({
 		rateLimitWindow: 60000,
 		rateLimitMax: 10,
@@ -30,11 +30,9 @@ describe("checkRateLimit", () => {
 
 	it("should block requests exceeding limit", () => {
 		const clientId = `test-client-${Date.now()}-3`;
-		// Make 10 requests (the limit)
 		for (let i = 0; i < 10; i++) {
 			checkRateLimit(clientId);
 		}
-		// 11th request should be blocked
 		const result = checkRateLimit(clientId);
 		expect(result.allowed).toBe(false);
 		expect(result.resetTime).toBeDefined();
@@ -43,25 +41,19 @@ describe("checkRateLimit", () => {
 
 describe("validateDownloadRequest", () => {
 	it("should validate correct TikTok URL", () => {
-		const result = validateDownloadRequest(
-			"https://www.tiktok.com/@user/video/1234567890",
-		);
+		const result = validateDownloadRequest("https://www.tiktok.com/@user/video/1234567890");
 		expect(result.valid).toBe(true);
 		expect(result.platform).toBe("tiktok");
 	});
 
 	it("should validate correct Instagram URL", () => {
-		const result = validateDownloadRequest(
-			"https://www.instagram.com/p/ABC123/",
-		);
+		const result = validateDownloadRequest("https://www.instagram.com/p/ABC123/");
 		expect(result.valid).toBe(true);
 		expect(result.platform).toBe("instagram");
 	});
 
 	it("should validate correct Twitter URL", () => {
-		const result = validateDownloadRequest(
-			"https://twitter.com/user/status/1234567890",
-		);
+		const result = validateDownloadRequest("https://twitter.com/user/status/1234567890");
 		expect(result.valid).toBe(true);
 		expect(result.platform).toBe("twitter");
 	});
@@ -73,15 +65,12 @@ describe("validateDownloadRequest", () => {
 	});
 
 	it("should reject unsupported platforms", () => {
-		const result = validateDownloadRequest(
-			"https://www.youtube.com/watch?v=123",
-		);
+		const result = validateDownloadRequest("https://www.youtube.com/watch?v=123");
 		expect(result.valid).toBe(false);
 		expect(result.error).toContain("Unsupported platform");
 	});
 
 	it("should handle suspicious user agents gracefully", () => {
-		// Should still validate but log warning
 		const result = validateDownloadRequest(
 			"https://www.tiktok.com/@user/video/1234567890",
 			"Googlebot/2.1",

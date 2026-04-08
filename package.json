@@ -2,17 +2,32 @@
   "name": "snatch",
   "private": true,
   "workspaces": [
-    "apps/*"
+    "apps/*",
+    "packages/*"
   ],
   "scripts": {
     "dev": "bun --filter '@snatch/web' dev",
-    "build": "bun --filter '@snatch/web' build",
+    "dev:api": "bun --filter '@snatch/api' dev",
+    "build": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build && bun --filter '@snatch/web' build",
+    "build:api": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build",
+    "build:web": "bun --filter '@snatch/web' build",
     "preview": "bun --filter '@snatch/web' preview",
-    "test": "bun --filter '@snatch/web' test",
-    "dev:api": "cd apps/api && cargo run",
-    "build:api": "cd apps/api && cargo build --release",
-    "test:api": "cd apps/api && cargo test",
+    "test": "bun --filter '*' test",
+    "test:shared": "bun --filter '@snatch/shared' test",
+    "test:api": "bun --filter '@snatch/api' test",
+    "test:web": "bun --filter '@snatch/web' test",
+    "typecheck": "bun --filter '*' typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "format": "biome format --write .",
+    "check": "biome check --fix .",
     "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down"
+    "docker:down": "docker compose down",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "husky": "^9.1.0",
+    "@types/bun": "latest"
   }
 }

@@ -1,0 +1,11 @@
+[install]
+# Use hardlinks for faster installs
+backend = "hardlink"
+
+[install.cache]
+# Disable cache for CI reproducibility (optional)
+# disable = true
+
+[test]
+# Test configuration for bun test
+root = "."

@@ -7,12 +7,7 @@ interface DownloaderInputProps {
 	loading: boolean;
 }
 
-export function DownloaderInput({
-	url,
-	onUrlChange,
-	onDownload,
-	loading,
-}: DownloaderInputProps) {
+export function DownloaderInput({ url, onUrlChange, onDownload, loading }: DownloaderInputProps) {
 	const handleKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
 		if (e.key === "Enter" && !loading) {
 			onDownload();

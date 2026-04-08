@@ -1,77 +1,50 @@
+import { formatFileSize, parseQuality } from "@snatch/shared";
+
 import type { APIRoute } from "astro";
-import {
-	checkRateLimit,
-	getClientId,
-	validateDownloadRequest,
-} from "@/middleware/security";
+import { checkRateLimit, getClientId, validateDownloadRequest } from "@/middleware/security";
 import type { DownloadResult, SupportedPlatform } from "@/types/download";
 
-// Rust API service URL (configurable via environment)
-const RUST_API_URL = import.meta.env.RUST_API_URL || "http://localhost:3001";
+// API service URL (configurable via environment)
+const API_URL = import.meta.env.API_URL || process.env.API_URL || "http://localhost:3001";
 
 // Request size limit: 10KB (should be more than enough for URL)
 const MAX_BODY_SIZE = 10 * 1024;
 
-interface RustFormat {
+interface ExtractFormat {
 	quality: string;
 	url: string;
 	ext: string;
 	filesize?: number;
 }
 
-interface RustExtractResponse {
+interface ExtractApiResponse {
 	success: boolean;
 	platform: string;
 	title: string;
 	thumbnail?: string;
-	formats: RustFormat[];
+	formats: ExtractFormat[];
 	error?: string;
 }
 
-/**
- * Transform Rust API response to frontend DownloadResult format
- */
-function transformRustResponse(
-	rustResponse: RustExtractResponse,
-	originalUrl: string,
-): DownloadResult[] {
-	const platform = rustResponse.platform as SupportedPlatform;
+function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string): DownloadResult[] {
+	const platform = apiResponse.platform as SupportedPlatform;
 
-	return rustResponse.formats.map((format, index) => {
-		// Use yt-dlp download endpoint with original social media URL
-		// This is more reliable than using the extracted video URL directly
-		const downloadUrl = `${RUST_API_URL}/api/download?url=${encodeURIComponent(originalUrl)}`;
+	return apiResponse.formats.map((format, index) => {
+		const downloadUrl = `${API_URL}/api/download?url=${encodeURIComponent(originalUrl)}`;
 
 		return {
 			id: `${platform}-${Date.now()}-${index}`,
 			type: "video" as const,
 			url: originalUrl,
-			thumbnail: rustResponse.thumbnail,
+			thumbnail: apiResponse.thumbnail,
 			downloadUrl,
-			title: rustResponse.title,
+			title: apiResponse.title,
 			size: format.filesize ? formatFileSize(format.filesize) : "Unknown",
 			platform,
 			quality: parseQuality(format.quality),
 			isMock: false,
 		};
 	});
-}
-
-function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function parseQuality(quality: string): "hd" | "sd" | "audio" {
-	const q = quality.toLowerCase();
-	if (q.includes("1080") || q.includes("720") || q === "best" || q === "hd") {
-		return "hd";
-	}
-	if (q.includes("audio")) {
-		return "audio";
-	}
-	return "sd";
 }
 
 export const POST: APIRoute = async ({ request }) => {
@@ -97,9 +70,7 @@ export const POST: APIRoute = async ({ request }) => {
 		const rateLimitCheck = checkRateLimit(clientId);
 		if (!rateLimitCheck.allowed) {
 			const resetTime = rateLimitCheck.resetTime;
-			const resetInMinutes = Math.ceil(
-				((resetTime || Date.now() + 60000) - Date.now()) / 60000,
-			);
+			const resetInMinutes = Math.ceil(((resetTime || Date.now() + 60000) - Date.now()) / 60000);
 
 			return new Response(
 				JSON.stringify({
@@ -150,10 +121,7 @@ export const POST: APIRoute = async ({ request }) => {
 		}
 
 		// Security validation
-		const validation = validateDownloadRequest(
-			url,
-			request.headers.get("user-agent") || undefined,
-		);
+		const validation = validateDownloadRequest(url, request.headers.get("user-agent") || undefined);
 
 		if (!validation.valid) {
 			return new Response(
@@ -165,41 +133,41 @@ export const POST: APIRoute = async ({ request }) => {
 			);
 		}
 
-		// Forward request to Rust API service with timeout
+		// Forward request to API service with timeout
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout
 
-		const rustResponse = await fetch(`${RUST_API_URL}/api/extract`, {
+		const apiResponse = await fetch(`${API_URL}/api/extract`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ url: url.trim() }),
 			signal: controller.signal,
 		}).finally(() => clearTimeout(timeoutId));
 
-		const rustData: RustExtractResponse = await rustResponse.json();
+		const apiData: ExtractApiResponse = await apiResponse.json();
 
-		if (!rustData.success || !rustData.formats?.length) {
+		if (!apiData.success || !apiData.formats?.length) {
 			return new Response(
 				JSON.stringify({
 					success: false,
-					error: rustData.error || "Failed to extract download links",
-					platform: rustData.platform,
+					error: apiData.error || "Failed to extract download links",
+					platform: apiData.platform,
 				}),
 				{
-					status: rustResponse.ok ? 500 : rustResponse.status,
+					status: apiResponse.ok ? 500 : apiResponse.status,
 					headers: { "Content-Type": "application/json" },
 				},
 			);
 		}
 
 		// Transform to frontend format
-		const results = transformRustResponse(rustData, url.trim());
+		const results = transformResponse(apiData, url.trim());
 
 		return new Response(
 			JSON.stringify({
 				success: true,
 				results,
-				platform: rustData.platform,
+				platform: apiData.platform,
 			}),
 			{
 				status: 200,
@@ -221,11 +189,10 @@ export const POST: APIRoute = async ({ request }) => {
 			});
 		}
 
-		// Check if Rust service is unavailable
+		// Check if API service is unavailable
 		const isConnectionError =
 			error instanceof Error &&
-			(error.message.includes("ECONNREFUSED") ||
-				error.message.includes("fetch failed"));
+			(error.message.includes("ECONNREFUSED") || error.message.includes("fetch failed"));
 
 		return new Response(
 			JSON.stringify({

@@ -1,13 +1,6 @@
-import {
-	CheckCircle,
-	Instagram,
-	Loader2,
-	Music,
-	Twitter,
-	XCircle,
-} from "lucide-react";
+import { detectPlatform } from "@snatch/shared";
+import { CheckCircle, Instagram, Loader2, Music, Twitter, XCircle } from "lucide-react";
 import { useState } from "react";
-import { detectPlatform } from "@/lib/validation";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { DownloaderInput } from "./DownloaderInput";
 import { DownloadResult } from "./DownloadResult";
@@ -26,9 +19,7 @@ export function DownloaderApp() {
 
 		const platform = detectPlatform(url);
 		if (!platform) {
-			setError(
-				"Unsupported platform. Please enter Instagram, X (Twitter), or TikTok URL",
-			);
+			setError("Unsupported platform. Please enter Instagram, X (Twitter), or TikTok URL");
 			return;
 		}
 
@@ -56,9 +47,7 @@ export function DownloaderApp() {
 		} catch (err) {
 			console.error("Download error:", err);
 			setError(
-				err instanceof Error
-					? err.message
-					: "Failed to download content. Please try again.",
+				err instanceof Error ? err.message : "Failed to download content. Please try again.",
 			);
 		} finally {
 			setLoading(false);
@@ -108,9 +97,7 @@ export function DownloaderApp() {
 								<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
 								<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
 							</span>
-							<span className="text-sm font-medium text-gray-300">
-								v1.0 Now Available
-							</span>
+							<span className="text-sm font-medium text-gray-300">v1.0 Now Available</span>
 						</div>
 
 						<h1 className="text-5xl md:text-7xl font-bold tracking-tight animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
@@ -120,8 +107,8 @@ export function DownloaderApp() {
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							Grab videos and images from Instagram, TikTok, and X (Twitter). No
-							watermarks, completely free.
+							Grab videos and images from Instagram, TikTok, and X (Twitter). No watermarks,
+							completely free.
 						</p>
 					</div>
 
@@ -149,12 +136,8 @@ export function DownloaderApp() {
 				{results.length > 0 && (
 					<div className="space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-700">
 						<div className="flex items-center justify-between border-b border-white/10 pb-6">
-							<h2 className="text-3xl font-bold text-white">
-								Download Results
-							</h2>
-							<span className="text-sm text-gray-400">
-								{results.length} items found
-							</span>
+							<h2 className="text-3xl font-bold text-white">Download Results</h2>
+							<span className="text-sm text-gray-400">{results.length} items found</span>
 						</div>
 						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
 							{results.map((result, index) => (
@@ -178,9 +161,7 @@ export function DownloaderApp() {
 							<Loader2 className="w-12 h-12 animate-spin text-purple-400 relative z-10" />
 						</div>
 						<div className="text-center space-y-2">
-							<h3 className="text-xl font-semibold text-white">
-								Extracting Content
-							</h3>
+							<h3 className="text-xl font-semibold text-white">Extracting Content</h3>
 							<p className="text-gray-400">
 								Please wait while we fetch the highest quality media...
 							</p>
@@ -191,12 +172,10 @@ export function DownloaderApp() {
 				{/* Supported Platforms */}
 				<div className="space-y-12">
 					<div className="text-center space-y-4">
-						<h2 className="text-3xl md:text-4xl font-bold">
-							Supported Platforms
-						</h2>
+						<h2 className="text-3xl md:text-4xl font-bold">Supported Platforms</h2>
 						<p className="text-gray-400 max-w-2xl mx-auto">
-							We support the most popular social media platforms with
-							specialized extraction engines.
+							We support the most popular social media platforms with specialized extraction
+							engines.
 						</p>
 					</div>
 
@@ -215,18 +194,14 @@ export function DownloaderApp() {
 
 									<div>
 										<div className="flex items-center justify-between mb-2">
-											<h3 className="text-xl font-bold text-white">
-												{platform.name}
-											</h3>
+											<h3 className="text-xl font-bold text-white">{platform.name}</h3>
 											<span
 												className={`text-xs font-medium px-2 py-1 rounded-full bg-white/5 ${platform.statusColor}`}
 											>
 												{platform.status}
 											</span>
 										</div>
-										<p className="text-sm text-gray-400 leading-relaxed">
-											{platform.description}
-										</p>
+										<p className="text-sm text-gray-400 leading-relaxed">{platform.description}</p>
 									</div>
 
 									<div className="pt-6 border-t border-white/5 space-y-2">
@@ -278,29 +253,24 @@ export function DownloaderApp() {
 					{[
 						{
 							title: "Lightning Fast",
-							description:
-								"Optimized extraction engine ensures downloads start in seconds.",
+							description: "Optimized extraction engine ensures downloads start in seconds.",
 							icon: "⚡",
 						},
 						{
 							title: "Highest Quality",
-							description:
-								"We always fetch the maximum resolution available from the source.",
+							description: "We always fetch the maximum resolution available from the source.",
 							icon: "💎",
 						},
 						{
 							title: "100% Free",
-							description:
-								"No hidden fees, no registration, just unlimited downloads.",
+							description: "No hidden fees, no registration, just unlimited downloads.",
 							icon: "🎁",
 						},
 					].map((feature) => (
 						<div key={feature.title} className="text-center p-6 space-y-4">
 							<div className="text-4xl mb-4">{feature.icon}</div>
 							<h3 className="text-lg font-bold text-white">{feature.title}</h3>
-							<p className="text-sm text-gray-400 leading-relaxed">
-								{feature.description}
-							</p>
+							<p className="text-sm text-gray-400 leading-relaxed">{feature.description}</p>
 						</div>
 					))}
 				</div>

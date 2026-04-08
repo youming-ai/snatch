@@ -3,13 +3,14 @@ services:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    container_name: snatch-backend
+    container_name: snatch-api
     ports:
-      - "38701:3001"
+      - "${API_PORT:-38701}:3001"
     environment:
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
-      - RUST_LOG=${RUST_LOG:-info}
+      - PORT=3001
       - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-10}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60000}
     restart: unless-stopped
     volumes:
       - ./data:/app/data

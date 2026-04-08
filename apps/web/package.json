@@ -6,12 +6,13 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "test": "bun test"
+    "test": "bun test",
+    "typecheck": "astro check && tsc --noEmit"
   },
   "dependencies": {
-    "@astrojs/cloudflare": "^12.6.12",
     "@astrojs/node": "^9.5.1",
     "@astrojs/react": "^4.4.2",
+    "@snatch/shared": "workspace:*",
     "@tailwindcss/vite": "^4.0.6",
     "astro": "^5.16.3",
     "lucide-react": "^0.544.0",
@@ -21,12 +22,11 @@
     "tw-animate-css": "^1.3.6"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.2.4",
-    "@testing-library/jest-dom": "^6.9.1",
+    "@types/bun": "latest",
     "@types/node": "^22.10.2",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "typescript": "^5.7.2",
-    "husky": "^8.0.0"
+    "typescript": "^5.7.2"
   }
+}
 }

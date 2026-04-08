@@ -65,12 +65,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
 						{/* Error Message */}
 						<div className="space-y-2">
-							<h1 className="text-2xl font-bold text-white">
-								Something went wrong
-							</h1>
+							<h1 className="text-2xl font-bold text-white">Something went wrong</h1>
 							<p className="text-gray-400">
-								{this.state.error?.message ||
-									"An unexpected error occurred. Please try again."}
+								{this.state.error?.message || "An unexpected error occurred. Please try again."}
 							</p>
 						</div>
 
