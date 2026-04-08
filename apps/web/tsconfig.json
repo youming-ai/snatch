@@ -14,7 +14,8 @@
     ],
     "types": [
       "vite/client",
-      "astro/client"
+      "astro/client",
+      "bun"
     ],
     /* Bundler mode */
     "moduleResolution": "bundler",
