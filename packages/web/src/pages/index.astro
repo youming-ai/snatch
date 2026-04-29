@@ -1,5 +1,7 @@
 ---
 import "../styles.css";
+// biome-ignore lint/correctness/noUnusedImports: used in template <DownloaderApp client:load />
+import { DownloaderApp } from "../components/DownloaderApp";
 ---
 
 <html lang="en">
@@ -31,8 +33,6 @@ import "../styles.css";
 		/>
 	</head>
 	<body>
-		<ErrorBoundary>
-			<DownloaderApp client:load />
-		</ErrorBoundary>
+		<DownloaderApp client:load />
 	</body>
 </html>

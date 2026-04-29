@@ -4,8 +4,15 @@ import type { APIRoute } from "astro";
 import { checkRateLimit, getClientId, validateDownloadRequest } from "@/middleware/security";
 import type { DownloadResult, SupportedPlatform } from "@/types/download";
 
-// API service URL (configurable via environment)
-const API_URL = import.meta.env.API_URL || process.env.API_URL || "http://localhost:3001";
+// API service URLs
+// - API_URL_INTERNAL: used for server-to-server fetch (container network or localhost)
+// - API_URL_PUBLIC:   used in download links returned to the browser (public origin)
+// Falls back to API_URL for backward compatibility when both are the same origin.
+const API_URL_FALLBACK = import.meta.env.API_URL || process.env.API_URL || "http://localhost:3001";
+const API_URL_INTERNAL =
+	import.meta.env.API_URL_INTERNAL || process.env.API_URL_INTERNAL || API_URL_FALLBACK;
+const API_URL_PUBLIC =
+	import.meta.env.API_URL_PUBLIC || process.env.API_URL_PUBLIC || API_URL_FALLBACK;
 
 // Request size limit: 10KB (should be more than enough for URL)
 const MAX_BODY_SIZE = 10 * 1024;
@@ -30,7 +37,7 @@ function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string)
 	const platform = apiResponse.platform as SupportedPlatform;
 
 	return apiResponse.formats.map((format, index) => {
-		const downloadUrl = `${API_URL}/api/download?url=${encodeURIComponent(originalUrl)}`;
+		const downloadUrl = `${API_URL_PUBLIC}/api/download?url=${encodeURIComponent(originalUrl)}`;
 
 		return {
 			id: `${platform}-${Date.now()}-${index}`,
@@ -137,7 +144,7 @@ export const POST: APIRoute = async ({ request }) => {
 		const controller = new AbortController();
 		const timeoutId = setTimeout(() => controller.abort(), 35000); // 35s timeout
 
-		const apiResponse = await fetch(`${API_URL}/api/extract`, {
+		const apiResponse = await fetch(`${API_URL_INTERNAL}/api/extract`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ url: url.trim() }),

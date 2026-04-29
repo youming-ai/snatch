@@ -7,9 +7,6 @@ build/
 .output/
 .astro/
 
-# Rust build outputs (legacy)
-apps/api-rs/target/
-
 # IDE & Editor
 .vscode/
 .idea/

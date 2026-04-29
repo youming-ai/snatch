@@ -2,7 +2,7 @@ services:
   api:
     build:
       context: .
-      dockerfile: apps/api/Dockerfile
+      dockerfile: packages/api/Dockerfile
     container_name: snatch-api
     ports:
       - "${API_PORT:-38701}:3001"
@@ -14,6 +14,8 @@ services:
     restart: unless-stopped
     volumes:
       - ./data:/app/data
+    networks:
+      - snatch
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
@@ -28,3 +30,46 @@ services:
         reservations:
           cpus: '0.25'
           memory: 128M
+
+  web:
+    build:
+      context: .
+      dockerfile: packages/web/Dockerfile
+    container_name: snatch-web
+    ports:
+      - "${WEB_PORT:-38700}:4321"
+    environment:
+      # Internal URL for SSR → API (container network)
+      - API_URL_INTERNAL=${API_URL_INTERNAL:-http://api:3001}
+      # Public URL used in download links returned to the browser.
+      # Must be set to the API's public origin reachable from users' browsers
+      # (e.g., https://api.example.com for Dokploy/Traefik, or http://localhost:38701 for local dev).
+      # Compose aborts if unset to prevent silently generating broken localhost links in production.
+      - API_URL_PUBLIC=${API_URL_PUBLIC:?must be set to the API public origin reachable from browsers, e.g. https://api.example.com or http://localhost:38701 for local dev}
+      - HOST=0.0.0.0
+      - PORT=4321
+      - NODE_ENV=production
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - snatch
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e 'fetch(\"http://localhost:4321/\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+
+networks:
+  snatch:
+    driver: bridge

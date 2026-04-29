@@ -4,8 +4,17 @@ import { useState } from "react";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { DownloaderInput } from "./DownloaderInput";
 import { DownloadResult } from "./DownloadResult";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 export function DownloaderApp() {
+	return (
+		<ErrorBoundary>
+			<DownloaderAppInner />
+		</ErrorBoundary>
+	);
+}
+
+function DownloaderAppInner() {
 	const [url, setUrl] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [results, setResults] = useState<DownloadResultType[]>([]);

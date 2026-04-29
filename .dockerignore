@@ -7,8 +7,7 @@ dist
 .env.local
 .DS_Store
 *.md
-apps/web
-apps/api/test
-apps/api-rs
+packages/api/test
+packages/web/test
 docs
 data

@@ -14,10 +14,9 @@ Social media video downloader — Bun monorepo with Hono API and Astro frontend.
 
 ```
 snatch/
-├── apps/
-│   ├── api/                # Bun + Hono API (yt-dlp)
-│   └── web/                # Astro + React frontend
 ├── packages/
+│   ├── api/                # Bun + Hono API (yt-dlp)
+│   ├── web/                # Astro + React frontend
 │   └── shared/             # Shared types, constants, validation
 ├── docker-compose.yml
 ├── package.json            # Bun workspace root

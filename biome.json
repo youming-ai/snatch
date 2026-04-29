@@ -1,12 +1,12 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.12/schema.json",
 	"files": {
 		"includes": [
-			"apps/api/src/**/*.ts",
-			"apps/api/test/**/*.ts",
-			"apps/web/src/**/*.ts",
-			"apps/web/src/**/*.tsx",
-			"apps/web/src/**/*.astro",
+			"packages/api/src/**/*.ts",
+			"packages/api/test/**/*.ts",
+			"packages/web/src/**/*.ts",
+			"packages/web/src/**/*.tsx",
+			"packages/web/src/**/*.astro",
 			"packages/shared/src/**/*.ts"
 		]
 	},

@@ -12,7 +12,9 @@ export default defineConfig({
     vite: {
         plugins: [tailwindcss()],
         ssr: {
-            noExternal: ["lucide-react"],
+            // Bundle all dependencies into dist/server/entry.mjs so the runtime
+            // image doesn't need node_modules. Shrinks the web Docker image dramatically.
+            noExternal: true,
         },
     },
 });
