@@ -11,7 +11,12 @@ const extractRouter = new Hono();
 const cache = new Cache<string, ExtractResponse>(100, 300_000);
 
 extractRouter.post("/api/extract", async (c) => {
-	const body = await c.req.json<{ url?: string }>();
+	let body: { url?: string };
+	try {
+		body = await c.req.json<{ url?: string }>();
+	} catch {
+		return c.json({ success: false, error: "Invalid JSON in request body" }, 400);
+	}
 	const { url } = body;
 
 	if (!url || typeof url !== "string") {
