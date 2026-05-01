@@ -1,4 +1,9 @@
-import { ALLOWED_PLATFORM_DOMAINS, DANGEROUS_CHARS_REGEX, PLATFORM_HOSTS, URL_PATTERNS } from "./constants";
+import {
+	ALLOWED_PLATFORM_DOMAINS,
+	DANGEROUS_CHARS_REGEX,
+	PLATFORM_HOSTS,
+	URL_PATTERNS,
+} from "./constants";
 import type { SupportedPlatform, ValidationSchema } from "./types";
 
 function parseHttpUrl(url: string): URL | null {
