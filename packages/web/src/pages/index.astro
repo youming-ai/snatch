@@ -2,34 +2,82 @@
 import "../styles.css";
 // biome-ignore lint/correctness/noUnusedImports: used in template <DownloaderApp client:load />
 import { DownloaderApp } from "../components/DownloaderApp";
+
+// biome-ignore-start lint/correctness/noUnusedVariables: consumed in <head> template below
+const title = "Snatch — Free Instagram, TikTok & X (Twitter) Video Downloader";
+const description =
+	"Download videos and images from Instagram, TikTok, and X (Twitter) for free. No signup, no ads — paste a link and Snatch grabs the original-quality file in seconds.";
+const canonical = new URL(Astro.url.pathname, Astro.site).toString();
+const ogImage = new URL("/logo512.png", Astro.site).toString();
+const structuredData = {
+	"@context": "https://schema.org",
+	"@type": "WebApplication",
+	name: "Snatch",
+	url: Astro.site?.toString(),
+	description,
+	applicationCategory: "MultimediaApplication",
+	operatingSystem: "Any",
+	browserRequirements: "Requires JavaScript. Requires HTML5.",
+	offers: {
+		"@type": "Offer",
+		price: "0",
+		priceCurrency: "USD",
+	},
+	featureList: [
+		"Download Instagram videos and reels",
+		"Download TikTok videos without watermark",
+		"Download X (Twitter) videos and images",
+		"Original quality, no signup required",
+	],
+};
+// biome-ignore-end lint/correctness/noUnusedVariables: consumed in <head> template below
 ---
 
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/logo.svg" />
-		<link rel="apple-touch-icon" href="/logo192.png" />
-		<link rel="manifest" href="/manifest.json" />
-		<meta name="theme-color" content="#7c3aed" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="generator" content={Astro.generator} />
-		<title>Snatch - Social Media Downloader</title>
-		<meta
-			name="description"
-			content="Snatch videos and images from Instagram, TikTok, and X (Twitter) in seconds"
-		/>
-		<meta name="robots" content="index, follow" />
-		<meta property="og:title" content="Snatch - Social Media Downloader" />
-		<meta
-			property="og:description"
-			content="Snatch high-quality videos and images from your favorite social platforms"
-		/>
+
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+		<meta name="robots" content="index, follow, max-image-preview:large" />
+		<meta name="theme-color" content="#7c3aed" />
+
+		<link rel="icon" type="image/svg+xml" href="/logo.svg" />
+		<link rel="icon" type="image/x-icon" href="/favicon.ico" />
+		<link rel="apple-touch-icon" href="/logo192.png" />
+		<link rel="manifest" href="/manifest.json" />
+		<link rel="sitemap" type="application/xml" href="/sitemap-index.xml" />
+
 		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="Snatch" />
+		<meta property="og:locale" content="en_US" />
+		<meta property="og:url" content={canonical} />
+		<meta property="og:title" content={title} />
+		<meta property="og:description" content={description} />
+		<meta property="og:image" content={ogImage} />
+		<meta property="og:image:width" content="512" />
+		<meta property="og:image:height" content="512" />
+		<meta property="og:image:alt" content="Snatch — social media video downloader" />
+
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content={title} />
+		<meta name="twitter:description" content={description} />
+		<meta name="twitter:image" content={ogImage} />
+
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link
 			href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
 			rel="stylesheet"
+		/>
+
+		<script
+			is:inline
+			type="application/ld+json"
+			set:html={JSON.stringify(structuredData)}
 		/>
 	</head>
 	<body>
