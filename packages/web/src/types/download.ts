@@ -1,1 +1,1 @@
-export type { DownloadResult, SupportedPlatform } from "@snatch/shared";
+export type { DownloadFormat, DownloadResult, SupportedPlatform } from "@snatch/shared";

@@ -11,11 +11,6 @@ import {
 } from "./validation";
 
 describe("validateUrl", () => {
-	it("should accept valid Instagram URLs", () => {
-		expect(validateUrl("https://instagram.com/p/ABC123").valid).toBe(true);
-		expect(validateUrl("https://www.instagram.com/reel/xyz").valid).toBe(true);
-	});
-
 	it("should accept valid TikTok URLs", () => {
 		expect(validateUrl("https://tiktok.com/@user/video/123").valid).toBe(true);
 		expect(validateUrl("https://www.tiktok.com/video/123").valid).toBe(true);
@@ -24,6 +19,12 @@ describe("validateUrl", () => {
 	it("should accept valid Twitter/X URLs", () => {
 		expect(validateUrl("https://twitter.com/user/status/123").valid).toBe(true);
 		expect(validateUrl("https://x.com/user/status/123").valid).toBe(true);
+	});
+
+	it("should accept valid YouTube URLs", () => {
+		expect(validateUrl("https://www.youtube.com/watch?v=jNQXAC9IVRw").valid).toBe(true);
+		expect(validateUrl("https://youtu.be/jNQXAC9IVRw").valid).toBe(true);
+		expect(validateUrl("https://www.youtube.com/shorts/jNQXAC9IVRw").valid).toBe(true);
 	});
 
 	it("should reject empty URLs", () => {
@@ -35,7 +36,7 @@ describe("validateUrl", () => {
 	});
 
 	it("should reject unsupported platforms", () => {
-		expect(validateUrl("https://youtube.com/watch?v=123").valid).toBe(false);
+		expect(validateUrl("https://instagram.com/p/ABC").valid).toBe(false);
 		expect(validateUrl("https://facebook.com/video/123").valid).toBe(false);
 	});
 
@@ -43,19 +44,17 @@ describe("validateUrl", () => {
 	// injected. The remaining job for validation is just rejecting URLs that
 	// are structurally malformed — anything containing whitespace.
 	it("should reject URLs containing whitespace", () => {
-		expect(validateUrl("https://instagram.com/p/123 extra").valid).toBe(false);
-		expect(validateUrl("https://instagram.com/p/123\nfoo").valid).toBe(false);
+		expect(validateUrl("https://tiktok.com/@user/video/123 extra").valid).toBe(false);
+		expect(validateUrl("https://x.com/user/status/123\nfoo").valid).toBe(false);
 	});
 
 	it("should accept URLs with multiple query parameters", () => {
 		expect(
-			validateUrl(
-				"https://www.instagram.com/reel/DXJRaKAlT0J/?utm_source=ig_web_copy_link&igsh=abc==",
-			).valid,
-		).toBe(true);
-		expect(
 			validateUrl("https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc").valid,
 		).toBe(true);
+		expect(validateUrl("https://www.youtube.com/watch?v=abc12345678&t=10s&list=foo").valid).toBe(
+			true,
+		);
 	});
 
 	it("should reject invalid URL format", () => {
@@ -64,11 +63,6 @@ describe("validateUrl", () => {
 });
 
 describe("detectPlatform", () => {
-	it("should detect Instagram URLs", () => {
-		expect(detectPlatform("https://www.instagram.com/p/ABC123")).toBe("instagram");
-		expect(detectPlatform("https://instagram.com/reel/XYZ789")).toBe("instagram");
-	});
-
 	it("should detect TikTok URLs", () => {
 		expect(detectPlatform("https://www.tiktok.com/@user/video/1234567890")).toBe("tiktok");
 		expect(detectPlatform("https://tiktok.com/@user/video/1234567890")).toBe("tiktok");
@@ -79,18 +73,19 @@ describe("detectPlatform", () => {
 		expect(detectPlatform("https://x.com/user/status/1234567890")).toBe("twitter");
 	});
 
+	it("should detect YouTube URLs", () => {
+		expect(detectPlatform("https://www.youtube.com/watch?v=jNQXAC9IVRw")).toBe("youtube");
+		expect(detectPlatform("https://youtu.be/jNQXAC9IVRw")).toBe("youtube");
+		expect(detectPlatform("https://www.youtube.com/shorts/jNQXAC9IVRw")).toBe("youtube");
+	});
+
 	it("should return null for unsupported platforms", () => {
-		expect(detectPlatform("https://www.youtube.com/watch?v=123")).toBeNull();
+		expect(detectPlatform("https://www.instagram.com/p/ABC123")).toBeNull();
 		expect(detectPlatform("not-a-url")).toBeNull();
 	});
 });
 
 describe("extractContentId", () => {
-	it("should extract Instagram post ID", () => {
-		expect(extractContentId("https://www.instagram.com/p/ABC123/", "instagram")).toBe("ABC123");
-		expect(extractContentId("https://instagram.com/reel/XYZ789/", "instagram")).toBe("XYZ789");
-	});
-
 	it("should extract TikTok video ID", () => {
 		expect(extractContentId("https://www.tiktok.com/@user/video/1234567890", "tiktok")).toBe(
 			"1234567890",
@@ -103,17 +98,27 @@ describe("extractContentId", () => {
 		);
 	});
 
+	it("should extract YouTube video ID from all URL shapes", () => {
+		expect(extractContentId("https://www.youtube.com/watch?v=jNQXAC9IVRw", "youtube")).toBe(
+			"jNQXAC9IVRw",
+		);
+		expect(extractContentId("https://youtu.be/jNQXAC9IVRw", "youtube")).toBe("jNQXAC9IVRw");
+		expect(extractContentId("https://www.youtube.com/shorts/jNQXAC9IVRw", "youtube")).toBe(
+			"jNQXAC9IVRw",
+		);
+	});
+
 	it("should return null for URLs without content ID", () => {
-		expect(extractContentId("https://instagram.com/", "instagram")).toBeNull();
+		expect(extractContentId("https://tiktok.com/", "tiktok")).toBeNull();
 	});
 });
 
 describe("validate", () => {
 	it("should validate correct URLs", () => {
-		const result = validate("https://www.instagram.com/p/ABC123/");
+		const result = validate("https://www.tiktok.com/@user/video/1234567890");
 		expect(result.isValid).toBe(true);
-		expect(result.platform).toBe("instagram");
-		expect(result.contentId).toBe("ABC123");
+		expect(result.platform).toBe("tiktok");
+		expect(result.contentId).toBe("1234567890");
 	});
 
 	it("should reject empty URLs", () => {
@@ -121,7 +126,7 @@ describe("validate", () => {
 	});
 
 	it("should reject unsupported platforms", () => {
-		const result = validate("https://www.youtube.com/watch?v=123");
+		const result = validate("https://www.instagram.com/p/ABC");
 		expect(result.isValid).toBe(false);
 		expect(result.errors[0]).toContain("Unsupported platform");
 	});
@@ -129,15 +134,13 @@ describe("validate", () => {
 
 describe("sanitizeUrl", () => {
 	it("should preserve safe query parameters", () => {
-		expect(sanitizeUrl("https://instagram.com/p/ABC123?query=test")).toBe(
-			"https://instagram.com/p/ABC123?query=test",
+		expect(sanitizeUrl("https://www.youtube.com/watch?v=ABC123")).toBe(
+			"https://www.youtube.com/watch?v=ABC123",
 		);
 	});
 
 	it("should remove dangerous query parameters", () => {
-		expect(sanitizeUrl("https://instagram.com/p/ABC123?callback=evil")).toBe(
-			"https://instagram.com/p/ABC123",
-		);
+		expect(sanitizeUrl("https://x.com/foo?callback=evil")).toBe("https://x.com/foo");
 	});
 
 	it("should reject dangerous protocols", () => {
@@ -152,7 +155,7 @@ describe("sanitizeUrl", () => {
 describe("isRetryableError", () => {
 	it("should mark validation errors as non-retryable", () => {
 		expect(isRetryableError("Invalid URL format")).toBe(false);
-		expect(isRetryableError("Unsupported platform: youtube.com")).toBe(false);
+		expect(isRetryableError("Unsupported platform: facebook.com")).toBe(false);
 	});
 
 	it("should mark network errors as retryable", () => {
@@ -167,6 +170,7 @@ describe("parseQuality", () => {
 		expect(parseQuality("720p")).toBe("hd");
 		expect(parseQuality("1920p")).toBe("hd");
 		expect(parseQuality("1280p")).toBe("hd");
+		expect(parseQuality("2160p")).toBe("hd");
 		expect(parseQuality("best")).toBe("hd");
 	});
 

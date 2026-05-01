@@ -1,7 +1,7 @@
 {
   "short_name": "Snatch",
   "name": "Snatch — Social Media Downloader",
-  "description": "Download videos and images from Instagram, TikTok, and X (Twitter) for free. No signup required.",
+  "description": "Download videos from X (Twitter), TikTok, and YouTube for free. No signup required.",
   "icons": [
     {
       "src": "favicon.ico",
