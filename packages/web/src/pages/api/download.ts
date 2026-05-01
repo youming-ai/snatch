@@ -60,24 +60,39 @@ function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string)
 	];
 }
 
-export const POST: APIRoute = async ({ request }) => {
-	try {
-		const clientId = getClientId(request);
-
-		// Check request size before parsing
-		const contentLength = request.headers.get("content-length");
-		if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
-			return new Response(
+async function readJsonBody(
+	request: Request,
+): Promise<{ ok: true; value: { url?: string } } | { ok: false; response: Response }> {
+	const bodyText = await request.text();
+	if (new TextEncoder().encode(bodyText).length > MAX_BODY_SIZE) {
+		return {
+			ok: false,
+			response: new Response(
 				JSON.stringify({
 					success: false,
 					error: `Request body too large. Maximum size is ${MAX_BODY_SIZE / 1024}KB.`,
 				}),
-				{
-					status: 413,
-					headers: { "Content-Type": "application/json" },
-				},
-			);
-		}
+				{ status: 413, headers: { "Content-Type": "application/json" } },
+			),
+		};
+	}
+
+	try {
+		return { ok: true, value: JSON.parse(bodyText) };
+	} catch {
+		return {
+			ok: false,
+			response: new Response(
+				JSON.stringify({ success: false, error: "Invalid JSON in request body" }),
+				{ status: 400, headers: { "Content-Type": "application/json" } },
+			),
+		};
+	}
+}
+
+export const POST: APIRoute = async ({ request }) => {
+	try {
+		const clientId = getClientId(request);
 
 		// Rate limiting check
 		const rateLimitCheck = checkRateLimit(clientId);
@@ -103,24 +118,9 @@ export const POST: APIRoute = async ({ request }) => {
 			);
 		}
 
-		// Get request data
-		let requestBody: { url?: string };
-		try {
-			requestBody = await request.json();
-		} catch (parseError) {
-			if (import.meta.env.DEV) {
-				console.error("Failed to parse request body:", parseError);
-			}
-			return new Response(
-				JSON.stringify({
-					success: false,
-					error: "Invalid JSON in request body",
-				}),
-				{ status: 400, headers: { "Content-Type": "application/json" } },
-			);
-		}
-
-		const { url } = requestBody;
+		const parsedBody = await readJsonBody(request);
+		if (!parsedBody.ok) return parsedBody.response;
+		const { url } = parsedBody.value;
 
 		if (!url || typeof url !== "string") {
 			return new Response(
@@ -237,6 +237,37 @@ export const GET: APIRoute = async ({ request }) => {
 			status: 400,
 			headers: { "Content-Type": "application/json" },
 		});
+	}
+
+	const clientId = getClientId(request);
+	const rateLimitCheck = checkRateLimit(clientId);
+	if (!rateLimitCheck.allowed) {
+		const resetTime = rateLimitCheck.resetTime;
+		const resetInMinutes = Math.ceil(((resetTime || Date.now() + 60000) - Date.now()) / 60000);
+		return new Response(
+			JSON.stringify({
+				success: false,
+				error: `Rate limit exceeded. Please try again in ${resetInMinutes} minute${resetInMinutes > 1 ? "s" : ""}.`,
+			}),
+			{
+				status: 429,
+				headers: {
+					"Content-Type": "application/json",
+					"Retry-After": resetInMinutes.toString(),
+				},
+			},
+		);
+	}
+
+	const validation = validateDownloadRequest(
+		target,
+		request.headers.get("user-agent") || undefined,
+	);
+	if (!validation.valid) {
+		return new Response(
+			JSON.stringify({ success: false, error: validation.error || "Invalid request" }),
+			{ status: 400, headers: { "Content-Type": "application/json" } },
+		);
 	}
 
 	try {
