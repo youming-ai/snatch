@@ -125,7 +125,11 @@ function DownloaderAppInner() {
 
 					{error && (
 						<div className="max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
-							<div role="alert" aria-live="assertive" className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400">
+							<div
+								role="alert"
+								aria-live="assertive"
+								className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-3 text-red-400"
+							>
 								<XCircle className="w-5 h-5 shrink-0" />
 								<p className="text-sm font-medium">{error}</p>
 							</div>
