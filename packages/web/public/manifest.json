@@ -1,7 +1,7 @@
 {
-  "short_name": "MediaGrabber",
-  "name": "MediaGrabber - Social Media Downloader",
-  "description": "Download videos and images from Instagram, TikTok, and X (Twitter)",
+  "short_name": "Snatch",
+  "name": "Snatch — Social Media Downloader",
+  "description": "Download videos and images from Instagram, TikTok, and X (Twitter) for free. No signup required.",
   "icons": [
     {
       "src": "favicon.ico",

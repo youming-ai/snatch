@@ -1,5 +1,0 @@
-# https://www.robotstxt.org/robotstxt.html
-User-agent: *
-Allow: /
-
-Sitemap: https://ins-x-tiktok-downloader.pages.dev/sitemap.xml
