@@ -7,6 +7,7 @@ const downloadRouter = new Hono();
 
 downloadRouter.get("/api/download", async (c) => {
 	const url = c.req.query("url");
+	const formatId = c.req.query("format_id");
 
 	if (!url) {
 		return c.json({ success: false, error: "URL is required" }, 400);
@@ -18,9 +19,10 @@ downloadRouter.get("/api/download", async (c) => {
 	}
 
 	try {
-		const videoStream = downloadVideoStream(url);
+		const videoStream = downloadVideoStream(url, formatId || undefined);
 
-		c.header("Content-Type", "video/mp4");
+		// Use application/octet-stream for downloads since actual format may vary
+		c.header("Content-Type", "application/octet-stream");
 		c.header("Content-Disposition", 'attachment; filename="video.mp4"');
 
 		return stream(c, async (stream) => {
