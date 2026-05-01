@@ -4,15 +4,15 @@ import type { APIRoute } from "astro";
 import { checkRateLimit, getClientId, validateDownloadRequest } from "@/middleware/security";
 import type { DownloadResult, SupportedPlatform } from "@/types/download";
 
-// API service URLs
-// - API_URL_INTERNAL: used for server-to-server fetch (container network or localhost)
-// - API_URL_PUBLIC:   used in download links returned to the browser (public origin)
-// Falls back to API_URL for backward compatibility when both are the same origin.
-const API_URL_FALLBACK = import.meta.env.API_URL || process.env.API_URL || "http://localhost:3001";
+// Internal API URL — used by the web SSR layer to reach the API service.
+// In Docker this resolves to `http://api:3001` (container network);
+// for local `bun dev` outside Docker it falls back to API_URL or localhost.
 const API_URL_INTERNAL =
-	import.meta.env.API_URL_INTERNAL || process.env.API_URL_INTERNAL || API_URL_FALLBACK;
-const API_URL_PUBLIC =
-	import.meta.env.API_URL_PUBLIC || process.env.API_URL_PUBLIC || API_URL_FALLBACK;
+	import.meta.env.API_URL_INTERNAL ||
+	process.env.API_URL_INTERNAL ||
+	import.meta.env.API_URL ||
+	process.env.API_URL ||
+	"http://localhost:3001";
 
 // Request size limit: 10KB (should be more than enough for URL)
 const MAX_BODY_SIZE = 10 * 1024;
@@ -37,7 +37,7 @@ function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string)
 	const platform = apiResponse.platform as SupportedPlatform;
 
 	return apiResponse.formats.map((format, index) => {
-		const downloadUrl = `${API_URL_PUBLIC}/api/download?url=${encodeURIComponent(originalUrl)}`;
+		const downloadUrl = `/api/download?url=${encodeURIComponent(originalUrl)}`;
 
 		return {
 			id: `${platform}-${Date.now()}-${index}`,
@@ -214,6 +214,46 @@ export const POST: APIRoute = async ({ request }) => {
 					"Content-Type": "application/json",
 					"X-Error-ID": Math.random().toString(36).substring(2, 11),
 				},
+			},
+		);
+	}
+};
+
+// Streams the actual file from the internal API so the browser only ever
+// talks to the web origin — keeps deployments single-domain.
+export const GET: APIRoute = async ({ request }) => {
+	const target = new URL(request.url).searchParams.get("url");
+	if (!target) {
+		return new Response(JSON.stringify({ success: false, error: "URL is required" }), {
+			status: 400,
+			headers: { "Content-Type": "application/json" },
+		});
+	}
+
+	try {
+		const upstream = await fetch(
+			`${API_URL_INTERNAL}/api/download?url=${encodeURIComponent(target)}`,
+			{ signal: request.signal },
+		);
+
+		const headers = new Headers();
+		for (const name of ["content-type", "content-disposition", "content-length"]) {
+			const value = upstream.headers.get(name);
+			if (value) headers.set(name, value);
+		}
+		return new Response(upstream.body, { status: upstream.status, headers });
+	} catch (error) {
+		const isConnectionError =
+			error instanceof Error &&
+			(error.message.includes("ECONNREFUSED") || error.message.includes("fetch failed"));
+		return new Response(
+			JSON.stringify({
+				success: false,
+				error: isConnectionError ? "Download service unavailable." : "An unexpected error occurred.",
+			}),
+			{
+				status: isConnectionError ? 503 : 500,
+				headers: { "Content-Type": "application/json" },
 			},
 		);
 	}

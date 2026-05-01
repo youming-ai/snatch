@@ -39,13 +39,9 @@ services:
     ports:
       - "${WEB_PORT:-38700}:4321"
     environment:
-      # Internal URL for SSR → API (container network)
+      # Internal URL for SSR → API (container network). The web SSR layer
+      # proxies the download stream, so the API never needs public exposure.
       - API_URL_INTERNAL=${API_URL_INTERNAL:-http://api:3001}
-      # Public URL used in download links returned to the browser.
-      # Must be set to the API's public origin reachable from users' browsers
-      # (e.g., https://api.example.com for Dokploy/Traefik, or http://localhost:38701 for local dev).
-      # Compose aborts if unset to prevent silently generating broken localhost links in production.
-      - API_URL_PUBLIC=${API_URL_PUBLIC:?must be set to the API public origin reachable from browsers, e.g. https://api.example.com or http://localhost:38701 for local dev}
       - HOST=0.0.0.0
       - PORT=4321
       - NODE_ENV=production
