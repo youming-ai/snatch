@@ -21,6 +21,7 @@ interface ExtractFormat {
 	quality: string;
 	url: string;
 	ext: string;
+	format_id: string;
 	filesize?: number;
 }
 
@@ -37,7 +38,7 @@ function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string)
 	const platform = apiResponse.platform as SupportedPlatform;
 
 	return apiResponse.formats.map((format, index) => {
-		const downloadUrl = `/api/download?url=${encodeURIComponent(originalUrl)}`;
+		const downloadUrl = `/api/download?url=${encodeURIComponent(originalUrl)}&format_id=${encodeURIComponent(format.format_id)}`;
 
 		return {
 			id: `${platform}-${Date.now()}-${index}`,
@@ -222,7 +223,10 @@ export const POST: APIRoute = async ({ request }) => {
 // Streams the actual file from the internal API so the browser only ever
 // talks to the web origin — keeps deployments single-domain.
 export const GET: APIRoute = async ({ request }) => {
-	const target = new URL(request.url).searchParams.get("url");
+	const url = new URL(request.url);
+	const target = url.searchParams.get("url");
+	const formatId = url.searchParams.get("format_id");
+
 	if (!target) {
 		return new Response(JSON.stringify({ success: false, error: "URL is required" }), {
 			status: 400,
@@ -231,10 +235,17 @@ export const GET: APIRoute = async ({ request }) => {
 	}
 
 	try {
-		const upstream = await fetch(
-			`${API_URL_INTERNAL}/api/download?url=${encodeURIComponent(target)}`,
-			{ signal: request.signal },
-		);
+		const upstreamUrl = new URL(`${API_URL_INTERNAL}/api/download`);
+		upstreamUrl.searchParams.set("url", target);
+		if (formatId) upstreamUrl.searchParams.set("format_id", formatId);
+
+		const upstream = await fetch(upstreamUrl.toString(), { signal: request.signal });
+
+		// If upstream returned an error status and JSON, forward it directly
+		const contentType = upstream.headers.get("content-type") || "";
+		if (!upstream.ok && contentType.includes("application/json")) {
+			return new Response(upstream.body, { status: upstream.status, headers: upstream.headers });
+		}
 
 		const headers = new Headers();
 		for (const name of ["content-type", "content-disposition", "content-length"]) {
