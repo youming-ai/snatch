@@ -45,6 +45,8 @@ services:
       - HOST=0.0.0.0
       - PORT=4321
       - NODE_ENV=production
+      - PUBLIC_RATE_LIMIT_MAX=${PUBLIC_RATE_LIMIT_MAX:-10}
+      - PUBLIC_RATE_LIMIT_WINDOW=${PUBLIC_RATE_LIMIT_WINDOW:-60000}
     depends_on:
       api:
         condition: service_healthy
