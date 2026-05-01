@@ -54,9 +54,7 @@ describe("validateUrl", () => {
 			).valid,
 		).toBe(true);
 		expect(
-			validateUrl(
-				"https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc",
-			).valid,
+			validateUrl("https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc").valid,
 		).toBe(true);
 	});
 

@@ -154,7 +154,6 @@ function extractFormats(json: any): VideoFormat[] {
 
 	// Fallback: requested_downloads (rare — when yt-dlp resolves a single download)
 	if (json.requested_downloads?.length) {
-		// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
 		const formats: VideoFormat[] = json.requested_downloads
 			// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
 			.filter((d: any) => d.url)
