@@ -37,10 +37,11 @@ export function checkRateLimit(clientId: string): { allowed: boolean; resetTime?
 }
 
 export function getClientId(request: Request): string {
-	const forwarded = request.headers.get("x-forwarded-for");
-	const realIp = request.headers.get("x-real-ip");
-	const ip = realIp || (forwarded ? forwarded.split(",")[0].trim() : "unknown");
-	return hashString(ip);
+	const trustedIp = request.headers.get("cf-connecting-ip") || request.headers.get("fly-client-ip");
+	if (trustedIp) return hashString(`ip:${trustedIp}`);
+
+	const userAgent = request.headers.get("user-agent") || "unknown-agent";
+	return hashString(`fallback:${userAgent}`);
 }
 
 export function validateDownloadRequest(

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from "bun:test";
-import { checkRateLimit, validateDownloadRequest } from "./security";
+import { checkRateLimit, getClientId, validateDownloadRequest } from "./security";
 
 // Mock the config module
 mock.module("@/config/env", () => ({
@@ -105,6 +105,30 @@ describe("validateDownloadRequest", () => {
 		expect(result.valid).toBe(false);
 		expect(result.error).toContain("Unsupported platform");
 	});
+
+describe("getClientId", () => {
+	it("should ignore spoofable forwarding headers without a trusted source", () => {
+		const first = new Request("https://snatch.test/api/download", {
+			headers: { "x-forwarded-for": "1.1.1.1" },
+		});
+		const second = new Request("https://snatch.test/api/download", {
+			headers: { "x-forwarded-for": "2.2.2.2" },
+		});
+
+		expect(getClientId(first)).toBe(getClientId(second));
+	});
+
+	it("should use the trusted platform header when present", () => {
+		const first = new Request("https://snatch.test/api/download", {
+			headers: { "cf-connecting-ip": "1.1.1.1" },
+		});
+		const second = new Request("https://snatch.test/api/download", {
+			headers: { "cf-connecting-ip": "2.2.2.2" },
+		});
+
+		expect(getClientId(first)).not.toBe(getClientId(second));
+	});
+});
 
 	it("should handle suspicious user agents gracefully", () => {
 		const result = validateDownloadRequest(
