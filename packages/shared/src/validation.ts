@@ -1,5 +1,27 @@
-import { ALLOWED_PLATFORM_DOMAINS, DANGEROUS_CHARS_REGEX, URL_PATTERNS } from "./constants";
+import { ALLOWED_PLATFORM_DOMAINS, DANGEROUS_CHARS_REGEX, PLATFORM_HOSTS, URL_PATTERNS } from "./constants";
 import type { SupportedPlatform, ValidationSchema } from "./types";
+
+function parseHttpUrl(url: string): URL | null {
+	try {
+		const parsed = new URL(url.trim());
+		return ["http:", "https:"].includes(parsed.protocol) ? parsed : null;
+	} catch {
+		return null;
+	}
+}
+
+function hostMatchesDomain(host: string, domain: string): boolean {
+	return host === domain || host.endsWith(`.${domain}`);
+}
+
+function platformFromHost(host: string): SupportedPlatform | null {
+	for (const [platform, domains] of Object.entries(PLATFORM_HOSTS)) {
+		if (domains.some((domain) => hostMatchesDomain(host, domain))) {
+			return platform as SupportedPlatform;
+		}
+	}
+	return null;
+}
 
 /**
  * Validate a URL for safe processing and supported platform check
@@ -51,19 +73,9 @@ export function validateUrl(url: string): { valid: boolean; error?: string } {
  * Detect platform from URL
  */
 export function detectPlatform(url: string): SupportedPlatform | null {
-	const normalizedUrl = url.toLowerCase().trim();
-
-	for (const [platform, config] of Object.entries(URL_PATTERNS)) {
-		if (config.domain.test(normalizedUrl)) {
-			return platform as SupportedPlatform;
-		}
-	}
-
-	if (normalizedUrl.includes("x.com")) {
-		return "twitter" as SupportedPlatform;
-	}
-
-	return null;
+	const parsed = parseHttpUrl(url);
+	if (!parsed) return null;
+	return platformFromHost(parsed.hostname.toLowerCase());
 }
 
 /**
@@ -113,14 +125,15 @@ export function validate(url: string): ValidationSchema {
 		errors.push("URL must use HTTP or HTTPS protocol");
 	}
 
-	const platform = detectPlatform(trimmedUrl);
+	const platform = platformFromHost(urlObj.hostname.toLowerCase());
 	if (!platform) {
 		errors.push("Unsupported platform. Please use X or TikTok URL");
 		return { isValid: false, errors };
 	}
 
+	const platformConfig = URL_PATTERNS[platform];
 	const contentId = extractContentId(trimmedUrl, platform);
-	if (!contentId) {
+	if (platformConfig.requiresContentId && !contentId) {
 		errors.push(`Could not extract content ID from ${platform} URL`);
 		return { isValid: false, errors, platform };
 	}
@@ -129,7 +142,7 @@ export function validate(url: string): ValidationSchema {
 		isValid: errors.length === 0,
 		errors,
 		platform,
-		contentId,
+		...(contentId ? { contentId } : {}),
 	};
 }
 
@@ -170,6 +183,9 @@ export function sanitizeUrl(url: string): string {
 	}
 
 	const urlObj = new URL(trimmedUrl);
+	if (!["http:", "https:"].includes(urlObj.protocol)) {
+		throw new Error("Unsupported protocol detected");
+	}
 
 	const dangerousParams = [
 		"callback",

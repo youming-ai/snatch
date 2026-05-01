@@ -5,10 +5,15 @@ export const SUPPORTED_PLATFORMS = {
 	TIKTOK: "tiktok",
 } as const;
 
+export const PLATFORM_HOSTS: Record<SupportedPlatform, string[]> = {
+	[SUPPORTED_PLATFORMS.TWITTER]: ["x.com", "twitter.com"],
+	[SUPPORTED_PLATFORMS.TIKTOK]: ["tiktok.com"],
+};
+
 export const PLATFORM_CONFIGS: Record<SupportedPlatform, PlatformConfig> = {
 	[SUPPORTED_PLATFORMS.TWITTER]: {
-		domain: "twitter.com",
-		name: "X (Twitter)",
+		domain: "x.com",
+		name: "X",
 		color: "text-blue-400",
 		bgColor: "bg-blue-400/10",
 		description: "Videos, GIFs",
@@ -24,20 +29,20 @@ export const PLATFORM_CONFIGS: Record<SupportedPlatform, PlatformConfig> = {
 	},
 };
 
-export const PLATFORM_DOMAINS = Object.values(PLATFORM_CONFIGS).map((config) => config.domain);
+export const PLATFORM_DOMAINS = Object.values(PLATFORM_HOSTS).flat();
 
 export const URL_PATTERNS = {
 	twitter: {
-		domain: /(?:x\.com|twitter\.com)/i,
 		patterns: [/\/status\/(\d+)/i],
+		requiresContentId: true,
 	},
 	tiktok: {
-		domain: /tiktok\.com/i,
 		patterns: [/\/video\/(\d+)/i, /\/@[^/]+\/video\/(\d+)/i],
+		requiresContentId: false,
 	},
 } as const;
 
-export const ALLOWED_PLATFORM_DOMAINS = ["tiktok.com", "twitter.com", "x.com"];
+export const ALLOWED_PLATFORM_DOMAINS = PLATFORM_DOMAINS;
 
 // Real share URLs never contain whitespace. We spawn yt-dlp via argv (no
 // shell), so shell metacharacters like `&;|$\`` cannot inject commands and

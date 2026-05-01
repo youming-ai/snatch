@@ -172,3 +172,23 @@ describe("formatFileSize", () => {
 		expect(formatFileSize(1500000)).toBe("1.4 MB");
 	});
 });
+
+describe("URL validation hardening", () => {
+	it("should reject spoofed platform domains in path", () => {
+		expect(detectPlatform("https://evil.com/x.com/user/status/1234567890")).toBeNull();
+		expect(validate("https://evil.com/x.com/user/status/1234567890").isValid).toBe(false);
+		expect(validateUrl("https://evil.com/x.com/user/status/1234567890").valid).toBe(false);
+	});
+
+	it("should accept TikTok short share URLs without content IDs", () => {
+		const result = validate("https://vm.tiktok.com/ZMabc123/");
+		expect(result.isValid).toBe(true);
+		expect(result.platform).toBe("tiktok");
+		expect(result.contentId).toBeUndefined();
+	});
+
+	it("should reject non-http protocols when sanitizing", () => {
+		expect(() => sanitizeUrl("mailto:user@example.com")).toThrow("Unsupported protocol");
+		expect(() => sanitizeUrl("blob:https://x.com/id")).toThrow("Unsupported protocol");
+	});
+});
