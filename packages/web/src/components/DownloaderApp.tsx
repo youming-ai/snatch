@@ -1,5 +1,5 @@
 import { detectPlatform } from "@snatch/shared";
-import { CheckCircle, Instagram, Loader2, Music, Twitter, XCircle } from "lucide-react";
+import { CheckCircle, Loader2, Music, Twitter, XCircle, Youtube } from "lucide-react";
 import { useState } from "react";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { DownloaderInput } from "./DownloaderInput";
@@ -28,7 +28,7 @@ function DownloaderAppInner() {
 
 		const platform = detectPlatform(url);
 		if (!platform) {
-			setError("Unsupported platform. Please enter Instagram, X (Twitter), or TikTok URL");
+			setError("Unsupported platform. Please enter X (Twitter), TikTok, or YouTube URL");
 			return;
 		}
 
@@ -65,9 +65,9 @@ function DownloaderAppInner() {
 
 	const supportedPlatforms = [
 		{
-			name: "Instagram",
-			icon: <Instagram className="w-8 h-8" />,
-			description: "Download photos and videos from Instagram posts and reels",
+			name: "X (Twitter)",
+			icon: <Twitter className="w-8 h-8" />,
+			description: "Download videos and images from X (Twitter)",
 			status: "Working",
 			statusColor: "text-green-400",
 		},
@@ -79,9 +79,9 @@ function DownloaderAppInner() {
 			statusColor: "text-green-400",
 		},
 		{
-			name: "X (Twitter)",
-			icon: <Twitter className="w-8 h-8" />,
-			description: "Download videos and images from X (Twitter)",
+			name: "YouTube",
+			icon: <Youtube className="w-8 h-8" />,
+			description: "Download videos and Shorts from YouTube",
 			status: "Working",
 			statusColor: "text-green-400",
 		},
@@ -116,8 +116,7 @@ function DownloaderAppInner() {
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							Grab videos and images from Instagram, TikTok, and X (Twitter). No watermarks,
-							completely free.
+							Grab videos from X (Twitter), TikTok, and YouTube. No watermarks, completely free.
 						</p>
 					</div>
 
@@ -226,15 +225,15 @@ function DownloaderAppInner() {
 												</div>
 											</>
 										)}
-										{platform.name === "Instagram" && (
+										{platform.name === "YouTube" && (
 											<>
 												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-yellow-400" />
-													<span>Reels & Posts</span>
+													<CheckCircle className="w-3 h-3 text-red-400" />
+													<span>Up to 4K</span>
 												</div>
 												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-yellow-400" />
-													<span>Stories (Coming Soon)</span>
+													<CheckCircle className="w-3 h-3 text-red-400" />
+													<span>Shorts Supported</span>
 												</div>
 											</>
 										)}

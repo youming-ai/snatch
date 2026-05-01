@@ -46,10 +46,10 @@ describe("validateDownloadRequest", () => {
 		expect(result.platform).toBe("tiktok");
 	});
 
-	it("should validate correct Instagram URL", () => {
-		const result = validateDownloadRequest("https://www.instagram.com/p/ABC123/");
+	it("should validate correct YouTube URL", () => {
+		const result = validateDownloadRequest("https://www.youtube.com/watch?v=jNQXAC9IVRw");
 		expect(result.valid).toBe(true);
-		expect(result.platform).toBe("instagram");
+		expect(result.platform).toBe("youtube");
 	});
 
 	it("should validate correct Twitter URL", () => {
@@ -65,7 +65,7 @@ describe("validateDownloadRequest", () => {
 	});
 
 	it("should reject unsupported platforms", () => {
-		const result = validateDownloadRequest("https://www.youtube.com/watch?v=123");
+		const result = validateDownloadRequest("https://www.instagram.com/p/ABC");
 		expect(result.valid).toBe(false);
 		expect(result.error).toContain("Unsupported platform");
 	});

@@ -4,9 +4,9 @@ import "../styles.css";
 import { DownloaderApp } from "../components/DownloaderApp";
 
 // biome-ignore-start lint/correctness/noUnusedVariables: consumed in <head> template below
-const title = "Snatch — Free Instagram, TikTok & X (Twitter) Video Downloader";
+const title = "Snatch — Free X (Twitter), TikTok & YouTube Video Downloader";
 const description =
-	"Download videos and images from Instagram, TikTok, and X (Twitter) for free. No signup, no ads — paste a link and Snatch grabs the original-quality file in seconds.";
+	"Download videos from X (Twitter), TikTok, and YouTube for free. No signup, no ads — paste a link and Snatch grabs the original-quality file in seconds.";
 const canonical = new URL(Astro.url.pathname, Astro.site).toString();
 const ogImage = new URL("/logo512.png", Astro.site).toString();
 const structuredData = {
@@ -24,9 +24,9 @@ const structuredData = {
 		priceCurrency: "USD",
 	},
 	featureList: [
-		"Download Instagram videos and reels",
+		"Download X (Twitter) videos and GIFs",
 		"Download TikTok videos without watermark",
-		"Download X (Twitter) videos and images",
+		"Download YouTube videos and Shorts",
 		"Original quality, no signup required",
 	],
 };

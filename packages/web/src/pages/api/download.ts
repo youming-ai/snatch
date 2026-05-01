@@ -2,7 +2,7 @@ import { formatFileSize, parseQuality } from "@snatch/shared";
 
 import type { APIRoute } from "astro";
 import { checkRateLimit, getClientId, validateDownloadRequest } from "@/middleware/security";
-import type { DownloadResult, SupportedPlatform } from "@/types/download";
+import type { DownloadFormat, DownloadResult, SupportedPlatform } from "@/types/download";
 
 // Internal API URL — used by the web SSR layer to reach the API service.
 // In Docker this resolves to `http://api:3001` (container network);
@@ -35,24 +35,29 @@ interface ExtractApiResponse {
 }
 
 function transformResponse(apiResponse: ExtractApiResponse, originalUrl: string): DownloadResult[] {
+	if (!apiResponse.formats?.length) return [];
+
 	const platform = apiResponse.platform as SupportedPlatform;
+	const formats: DownloadFormat[] = apiResponse.formats.map((f) => ({
+		formatId: f.format_id,
+		quality: f.quality,
+		qualityCategory: parseQuality(f.quality),
+		size: f.filesize ? formatFileSize(f.filesize) : undefined,
+		downloadUrl: `/api/download?url=${encodeURIComponent(originalUrl)}&format_id=${encodeURIComponent(f.format_id)}`,
+	}));
 
-	return apiResponse.formats.map((format, index) => {
-		const downloadUrl = `/api/download?url=${encodeURIComponent(originalUrl)}&format_id=${encodeURIComponent(format.format_id)}`;
-
-		return {
-			id: `${platform}-${Date.now()}-${index}`,
-			type: "video" as const,
+	return [
+		{
+			id: `${platform}-${Date.now()}`,
+			type: "video",
 			url: originalUrl,
 			thumbnail: apiResponse.thumbnail,
-			downloadUrl,
 			title: apiResponse.title,
-			size: format.filesize ? formatFileSize(format.filesize) : "Unknown",
 			platform,
-			quality: parseQuality(format.quality),
+			formats,
 			isMock: false,
-		};
-	});
+		},
+	];
 }
 
 export const POST: APIRoute = async ({ request }) => {

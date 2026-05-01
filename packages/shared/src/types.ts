@@ -2,7 +2,7 @@
  * Core type definitions shared between API and web
  */
 
-export type SupportedPlatform = "instagram" | "twitter" | "tiktok";
+export type SupportedPlatform = "twitter" | "tiktok" | "youtube";
 
 export interface VideoFormat {
 	format_id: string;
@@ -21,16 +21,27 @@ export interface ExtractResponse {
 	error?: string;
 }
 
+/**
+ * One quality variant of a single video. A video usually has 2–3 of these
+ * (e.g. 1080p / 720p / 540p) and the UI renders them as a quality picker
+ * inside ONE result card — not as separate cards.
+ */
+export interface DownloadFormat {
+	formatId: string;
+	quality: string;
+	qualityCategory: "hd" | "sd" | "audio";
+	size?: string;
+	downloadUrl: string;
+}
+
 export interface DownloadResult {
 	id: string;
 	type: "video" | "image";
 	url: string;
 	thumbnail?: string;
-	downloadUrl: string;
 	title: string;
-	size?: string;
 	platform: SupportedPlatform;
-	quality?: "hd" | "sd" | "audio";
+	formats: DownloadFormat[];
 	isMock?: boolean;
 	isFallback?: boolean;
 	metadata?: DownloadMetadata;

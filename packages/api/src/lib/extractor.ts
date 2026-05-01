@@ -196,8 +196,9 @@ function detectPlatform(url: string): string {
 		}
 	})();
 
-	if (host.includes("instagram.com")) return "instagram";
 	if (host.includes("tiktok.com")) return "tiktok";
 	if (host.includes("x.com") || host.includes("twitter.com")) return "twitter";
+	if (host.includes("youtube.com") || host === "youtu.be" || host.endsWith(".youtu.be"))
+		return "youtube";
 	return "unknown";
 }
