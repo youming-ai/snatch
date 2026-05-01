@@ -106,6 +106,15 @@ describe("validateDownloadRequest", () => {
 		expect(result.error).toContain("Unsupported platform");
 	});
 
+	it("should handle suspicious user agents gracefully", () => {
+		const result = validateDownloadRequest(
+			"https://www.tiktok.com/@user/video/1234567890",
+			"Googlebot/2.1",
+		);
+		expect(result.valid).toBe(true);
+	});
+});
+
 describe("getClientId", () => {
 	it("should ignore spoofable forwarding headers without a trusted source", () => {
 		const first = new Request("https://snatch.test/api/download", {
@@ -127,14 +136,5 @@ describe("getClientId", () => {
 		});
 
 		expect(getClientId(first)).not.toBe(getClientId(second));
-	});
-});
-
-	it("should handle suspicious user agents gracefully", () => {
-		const result = validateDownloadRequest(
-			"https://www.tiktok.com/@user/video/1234567890",
-			"Googlebot/2.1",
-		);
-		expect(result.valid).toBe(true);
 	});
 });
