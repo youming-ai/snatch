@@ -37,11 +37,7 @@ export const URL_PATTERNS = {
 	},
 } as const;
 
-export const ALLOWED_PLATFORM_DOMAINS = [
-	"tiktok.com",
-	"twitter.com",
-	"x.com",
-];
+export const ALLOWED_PLATFORM_DOMAINS = ["tiktok.com", "twitter.com", "x.com"];
 
 // Real share URLs never contain whitespace. We spawn yt-dlp via argv (no
 // shell), so shell metacharacters like `&;|$\`` cannot inject commands and
