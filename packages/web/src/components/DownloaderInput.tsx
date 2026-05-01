@@ -23,6 +23,7 @@ export function DownloaderInput({ url, onUrlChange, onDownload, loading }: Downl
 					onChange={(e) => onUrlChange(e.target.value)}
 					onKeyDown={handleKeyPress}
 					placeholder="Paste X or TikTok URL here..."
+					aria-label="Video URL"
 					className="w-full px-6 py-4 bg-white/5 border border-white/10 rounded-2xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 transition-all duration-300"
 					disabled={loading}
 				/>
