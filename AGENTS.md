@@ -54,10 +54,12 @@ If either fails, the operation is blocked. Fix issues and retry.
 
 ## Architecture Notes
 
-- **Web SSR proxy**: Astro's `/api/download` endpoint validates + rate-limits, then proxies to the internal API (`API_URL_INTERNAL`). Browser download links point to the public API (`API_URL_PUBLIC`).
+- **Web SSR proxy**: Both `POST` and `GET /api/download` validate + rate-limit before proxying to the internal API (`API_URL_INTERNAL`). `POST` extracts metadata; `GET` streams the actual file.
 - **Environment loading**: Astro/Vite reads env via `import.meta.env`. Public env vars **must** use `PUBLIC_` prefix (e.g. `PUBLIC_RATE_LIMIT_MAX`).
+- **Rate limiting**: Ignores generic `x-forwarded-for`. Deployments needing per-client IPs should provide `cf-connecting-ip` (Cloudflare) or `fly-client-ip` (Fly.io) from a trusted proxy. Without these, falls back to user-agent hashing.
 - **Shared package discipline**: Keep it dependency-free. If you need to add a runtime dep, add it to the consumer package instead.
 - **Type safety**: `shared` typechecks first in every build. Web typecheck runs `astro check` + `tsc --noEmit`.
+- **URL validation**: `detectPlatform()` matches only the parsed hostname (not the full URL string) against canonical platform domains in `PLATFORM_HOSTS`.
 
 ## Docker
 
