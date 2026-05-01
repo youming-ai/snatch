@@ -1,10 +1,17 @@
 import type { ExtractResponse, VideoFormat } from "@snatch/shared";
 
-/**
- * Extract video information using yt-dlp with retry logic
- */
+let ytDlpCommand = "yt-dlp";
+
+export function setYtDlpCommandForTest(command: string): void {
+	ytDlpCommand = command;
+}
+
+export function resetYtDlpCommandForTest(): void {
+	ytDlpCommand = "yt-dlp";
+}
+
 export async function extractVideoInfo(url: string): Promise<ExtractResponse> {
-	const proc = Bun.spawn(["yt-dlp", "--dump-json", "--no-warnings", "--no-playlist", url], {
+	const proc = Bun.spawn([ytDlpCommand, "--dump-json", "--no-warnings", "--no-playlist", url], {
 		stdout: "pipe",
 		stderr: "pipe",
 	});
@@ -13,19 +20,20 @@ export async function extractVideoInfo(url: string): Promise<ExtractResponse> {
 		proc.kill();
 	}, 30_000);
 
+	const stdoutPromise = new Response(proc.stdout).text();
+	const stderrPromise = new Response(proc.stderr).text();
+
 	try {
 		const exitCode = await proc.exited;
+		const [stdout, stderr] = await Promise.all([stdoutPromise, stderrPromise]);
 		clearTimeout(timeout);
 
 		if (exitCode !== 0) {
-			const stderr = await new Response(proc.stderr).text();
 			const firstLine = stderr.trim().split("\n")[0] || "yt-dlp failed";
 			throw new Error(`Extraction failed: ${firstLine}`);
 		}
 
-		const stdout = await new Response(proc.stdout).text();
 		const json = JSON.parse(stdout);
-
 		return parseYtDlpOutput(json, url);
 	} finally {
 		clearTimeout(timeout);
@@ -39,7 +47,7 @@ export async function extractVideoInfo(url: string): Promise<ExtractResponse> {
 export function downloadVideoStream(url: string, formatId?: string): ReadableStream<Uint8Array> {
 	const formatArg = formatId || "best[ext=mp4]/best";
 	const proc = Bun.spawn(
-		["yt-dlp", "-o", "-", "--no-warnings", "--no-playlist", "-f", formatArg, url],
+		[ytDlpCommand, "-o", "-", "--no-warnings", "--no-playlist", "-f", formatArg, url],
 		{
 			stdout: "pipe",
 			stderr: "pipe",
@@ -56,32 +64,41 @@ export function downloadVideoStream(url: string, formatId?: string): ReadableStr
 		}, READ_TIMEOUT_MS);
 	};
 
+	// biome-ignore lint/suspicious/noExplicitAny: Bun ReadableStreamDefaultReader type mismatch between stream/web and global
+	let reader: any = null;
+	const stderrPromise = new Response(proc.stderr).text();
+
 	return new ReadableStream({
 		start() {
+			reader = proc.stdout.getReader();
 			resetTimeout();
 		},
 		async pull(controller) {
-			const reader = proc.stdout.getReader();
+			if (!reader) return;
 			try {
-				while (true) {
-					const { done, value } = await reader.read();
-					if (done) {
-						if (timeoutId) clearTimeout(timeoutId);
-						controller.close();
-						break;
-					}
+				const { done, value } = await reader.read();
+				if (!done) {
 					resetTimeout();
 					controller.enqueue(value);
+					return;
 				}
+
+				if (timeoutId) clearTimeout(timeoutId);
+				const [exitCode, stderr] = await Promise.all([proc.exited, stderrPromise]);
+				if (exitCode !== 0) {
+					const firstLine = stderr.trim().split("\n")[0] || "yt-dlp failed";
+					controller.error(new Error(`Download failed: ${firstLine}`));
+					return;
+				}
+				controller.close();
 			} catch (error) {
 				if (timeoutId) clearTimeout(timeoutId);
 				controller.error(error);
-			} finally {
-				reader.releaseLock();
 			}
 		},
 		cancel() {
 			if (timeoutId) clearTimeout(timeoutId);
+			reader?.releaseLock();
 			proc.kill();
 		},
 	});
