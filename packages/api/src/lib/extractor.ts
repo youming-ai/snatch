@@ -107,61 +107,82 @@ function parseYtDlpOutput(json: any, url: string): ExtractResponse {
 }
 
 /**
- * Extract formats from yt-dlp JSON
+ * Extract formats from yt-dlp JSON.
+ *
+ * Always prefers the `formats[]` array so the user gets a real quality
+ * picker. Top-level `url` is only used as a last resort, because yt-dlp
+ * exposes it for every video (it's the auto-selected best format) and
+ * short-circuiting on it collapses everything to a single option.
  */
 // biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON output is dynamic
 function extractFormats(json: any): VideoFormat[] {
-	const formats: VideoFormat[] = [];
-
-	// Try direct URL first
-	if (json.url) {
-		formats.push({
-			format_id: json.format_id || "best",
-			quality: "best",
-			url: json.url,
-			ext: json.ext || "mp4",
-			filesize: json.filesize || undefined,
-		});
-		return formats;
-	}
-
-	// Parse formats array
 	if (json.formats?.length) {
-		const videoFormats = json.formats
-			// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
-			.filter((f: any) => f.vcodec !== "none" && f.url)
-			// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
-			.sort((a: any, b: any) => (b.height || 0) - (a.height || 0))
+		// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
+		const videoFormats = json.formats.filter((f: any) => f.vcodec !== "none" && f.url);
+
+		// Dedupe by height: same-resolution variants (e.g. TikTok DASH segments
+		// numbered -0 / -1) are noise to the user. Keep the largest filesize.
+		// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
+		const byHeight = new Map<number, any>();
+		for (const f of videoFormats) {
+			const h = f.height || 0;
+			const existing = byHeight.get(h);
+			const size = f.filesize || f.filesize_approx || 0;
+			const existingSize = existing ? existing.filesize || existing.filesize_approx || 0 : -1;
+			if (!existing || size > existingSize) {
+				byHeight.set(h, f);
+			}
+		}
+
+		const ranked = [...byHeight.values()]
+			.sort((a, b) => (b.height || 0) - (a.height || 0))
 			.slice(0, 3);
 
-		for (const f of videoFormats) {
+		const formats: VideoFormat[] = ranked.map((f) => {
 			const height = f.height || 0;
-			formats.push({
+			return {
 				format_id: f.format_id || "unknown",
 				quality: height > 0 ? `${height}p` : f.format_note || "unknown",
 				url: f.url,
 				ext: f.ext || "mp4",
-				filesize: f.filesize || undefined,
-			});
-		}
+				filesize: f.filesize || f.filesize_approx || undefined,
+			};
+		});
+
+		if (formats.length > 0) return formats;
 	}
 
-	// Fallback: requested_downloads
-	if (formats.length === 0 && json.requested_downloads?.length) {
-		for (const d of json.requested_downloads) {
-			if (d.url) {
-				formats.push({
-					format_id: d.format_id || "best",
-					quality: "best",
-					url: d.url,
-					ext: d.ext || "mp4",
-					filesize: d.filesize || undefined,
-				});
-			}
-		}
+	// Fallback: requested_downloads (rare — when yt-dlp resolves a single download)
+	if (json.requested_downloads?.length) {
+		// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
+		const formats: VideoFormat[] = json.requested_downloads
+			// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
+			.filter((d: any) => d.url)
+			// biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON is dynamic
+			.map((d: any) => ({
+				format_id: d.format_id || "best",
+				quality: "best",
+				url: d.url,
+				ext: d.ext || "mp4",
+				filesize: d.filesize || d.filesize_approx || undefined,
+			}));
+		if (formats.length > 0) return formats;
 	}
 
-	return formats;
+	// Last resort: top-level url (single quality)
+	if (json.url) {
+		return [
+			{
+				format_id: json.format_id || "best",
+				quality: "best",
+				url: json.url,
+				ext: json.ext || "mp4",
+				filesize: json.filesize || json.filesize_approx || undefined,
+			},
+		];
+	}
+
+	return [];
 }
 
 /**

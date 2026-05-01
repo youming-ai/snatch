@@ -39,12 +39,25 @@ describe("validateUrl", () => {
 		expect(validateUrl("https://facebook.com/video/123").valid).toBe(false);
 	});
 
-	it("should reject command injection attempts", () => {
-		expect(validateUrl("https://instagram.com/p/123; rm -rf /").valid).toBe(false);
-		expect(validateUrl("https://instagram.com/p/123| cat /etc/passwd").valid).toBe(false);
-		expect(validateUrl("https://instagram.com/p/123& malicious").valid).toBe(false);
-		expect(validateUrl("https://instagram.com/p/123$(whoami)").valid).toBe(false);
-		expect(validateUrl("https://instagram.com/p/123`whoami`").valid).toBe(false);
+	// We spawn yt-dlp via argv (no shell), so shell metacharacters can't be
+	// injected. The remaining job for validation is just rejecting URLs that
+	// are structurally malformed — anything containing whitespace.
+	it("should reject URLs containing whitespace", () => {
+		expect(validateUrl("https://instagram.com/p/123 extra").valid).toBe(false);
+		expect(validateUrl("https://instagram.com/p/123\nfoo").valid).toBe(false);
+	});
+
+	it("should accept URLs with multiple query parameters", () => {
+		expect(
+			validateUrl(
+				"https://www.instagram.com/reel/DXJRaKAlT0J/?utm_source=ig_web_copy_link&igsh=abc==",
+			).valid,
+		).toBe(true);
+		expect(
+			validateUrl(
+				"https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc",
+			).valid,
+		).toBe(true);
 	});
 
 	it("should reject invalid URL format", () => {
@@ -154,6 +167,8 @@ describe("parseQuality", () => {
 	it("should parse HD qualities", () => {
 		expect(parseQuality("1080p")).toBe("hd");
 		expect(parseQuality("720p")).toBe("hd");
+		expect(parseQuality("1920p")).toBe("hd");
+		expect(parseQuality("1280p")).toBe("hd");
 		expect(parseQuality("best")).toBe("hd");
 	});
 
