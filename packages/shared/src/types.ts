@@ -5,6 +5,7 @@
 export type SupportedPlatform = "instagram" | "twitter" | "tiktok";
 
 export interface VideoFormat {
+	format_id: string;
 	quality: string;
 	url: string;
 	ext: string;
