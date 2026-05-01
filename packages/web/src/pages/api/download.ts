@@ -260,7 +260,9 @@ export const GET: APIRoute = async ({ request }) => {
 		return new Response(
 			JSON.stringify({
 				success: false,
-				error: isConnectionError ? "Download service unavailable." : "An unexpected error occurred.",
+				error: isConnectionError
+					? "Download service unavailable."
+					: "An unexpected error occurred.",
 			}),
 			{
 				status: isConnectionError ? 503 : 500,
