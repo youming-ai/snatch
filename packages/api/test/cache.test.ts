@@ -48,4 +48,17 @@ describe("Cache", () => {
 		cache.clear();
 		expect(cache.size).toBe(0);
 	});
+
+	it("should refresh recency on get", () => {
+		const cache = new Cache<string, string>(2, 1000);
+		cache.put("a", "first");
+		cache.put("b", "second");
+
+		expect(cache.get("a")).toBe("first");
+		cache.put("c", "third");
+
+		expect(cache.get("a")).toBe("first");
+		expect(cache.get("b")).toBeUndefined();
+		expect(cache.get("c")).toBe("third");
+	});
 });

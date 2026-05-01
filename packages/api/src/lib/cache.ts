@@ -25,11 +25,15 @@ export class Cache<K, V> {
 			return undefined;
 		}
 
+		this.data.delete(key);
+		this.data.set(key, entry);
 		return entry.data;
 	}
 
 	put(key: K, value: V): void {
-		// Evict oldest if full
+		this.data.delete(key);
+		this.cleanup();
+
 		while (this.data.size >= this.maxSize) {
 			this.evictOldest();
 		}
@@ -65,16 +69,7 @@ export class Cache<K, V> {
 	}
 
 	private evictOldest(): void {
-		let oldestKey: K | undefined;
-		let oldestTime = Infinity;
-
-		for (const [key, entry] of this.data.entries()) {
-			if (entry.expiresAt < oldestTime) {
-				oldestTime = entry.expiresAt;
-				oldestKey = key;
-			}
-		}
-
+		const oldestKey = this.data.keys().next().value;
 		if (oldestKey !== undefined) {
 			this.data.delete(oldestKey);
 		}
