@@ -3,7 +3,6 @@ import type { PlatformConfig, SupportedPlatform } from "./types";
 export const SUPPORTED_PLATFORMS = {
 	TWITTER: "twitter",
 	TIKTOK: "tiktok",
-	YOUTUBE: "youtube",
 } as const;
 
 export const PLATFORM_CONFIGS: Record<SupportedPlatform, PlatformConfig> = {
@@ -23,14 +22,6 @@ export const PLATFORM_CONFIGS: Record<SupportedPlatform, PlatformConfig> = {
 		description: "No Watermark Videos",
 		supportedMedia: ["video"],
 	},
-	[SUPPORTED_PLATFORMS.YOUTUBE]: {
-		domain: "youtube.com",
-		name: "YouTube",
-		color: "text-red-500",
-		bgColor: "bg-red-500/10",
-		description: "Videos & Shorts",
-		supportedMedia: ["video"],
-	},
 };
 
 export const PLATFORM_DOMAINS = Object.values(PLATFORM_CONFIGS).map((config) => config.domain);
@@ -44,22 +35,12 @@ export const URL_PATTERNS = {
 		domain: /tiktok\.com/i,
 		patterns: [/\/video\/(\d+)/i, /\/@[^/]+\/video\/(\d+)/i],
 	},
-	youtube: {
-		domain: /(?:youtube\.com|youtu\.be)/i,
-		patterns: [
-			/[?&]v=([A-Za-z0-9_-]{11})/i,
-			/\/shorts\/([A-Za-z0-9_-]{11})/i,
-			/youtu\.be\/([A-Za-z0-9_-]{11})/i,
-		],
-	},
 } as const;
 
 export const ALLOWED_PLATFORM_DOMAINS = [
 	"tiktok.com",
 	"twitter.com",
 	"x.com",
-	"youtube.com",
-	"youtu.be",
 ];
 
 // Real share URLs never contain whitespace. We spawn yt-dlp via argv (no

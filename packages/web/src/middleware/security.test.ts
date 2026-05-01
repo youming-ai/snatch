@@ -46,10 +46,46 @@ describe("validateDownloadRequest", () => {
 		expect(result.platform).toBe("tiktok");
 	});
 
-	it("should validate correct YouTube URL", () => {
-		const result = validateDownloadRequest("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+	it("should validate correct X URL", () => {
+		const result = validateDownloadRequest("https://x.com/user/status/1234567890");
 		expect(result.valid).toBe(true);
-		expect(result.platform).toBe("youtube");
+		expect(result.platform).toBe("twitter");
+	});
+
+	it("should validate correct Twitter URL", () => {
+		const result = validateDownloadRequest("https://twitter.com/user/status/1234567890");
+		expect(result.valid).toBe(true);
+		expect(result.platform).toBe("twitter");
+	});
+
+	it("should reject YouTube URLs", () => {
+		const result = validateDownloadRequest("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Unsupported platform");
+	});
+
+	it("should reject invalid URLs", () => {
+		const result = validateDownloadRequest("not-a-url");
+		expect(result.valid).toBe(false);
+		expect(result.error).toBeDefined();
+	});
+
+	it("should reject unsupported platforms", () => {
+		const result = validateDownloadRequest("https://www.instagram.com/p/ABC");
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Unsupported platform");
+	});
+
+	it("should reject YouTube URLs", () => {
+		const result = validateDownloadRequest("https://www.youtube.com/watch?v=jNQXAC9IVRw");
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Unsupported platform");
+	});
+
+	it("should validate correct X URL", () => {
+		const result = validateDownloadRequest("https://x.com/user/status/1234567890");
+		expect(result.valid).toBe(true);
+		expect(result.platform).toBe("twitter");
 	});
 
 	it("should validate correct Twitter URL", () => {

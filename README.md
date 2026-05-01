@@ -6,9 +6,9 @@ Social media video downloader — Bun monorepo with Hono API and Astro frontend.
 
 | Platform | Video |
 |----------|-------|
-| X (Twitter) | ✅ |
+| X | ✅ |
 | TikTok | ✅ |
-| YouTube | ✅ (incl. Shorts) |
+| YouTube | ❌ (removed) |
 
 ## Project Structure
 

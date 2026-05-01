@@ -21,10 +21,10 @@ describe("validateUrl", () => {
 		expect(validateUrl("https://x.com/user/status/123").valid).toBe(true);
 	});
 
-	it("should accept valid YouTube URLs", () => {
-		expect(validateUrl("https://www.youtube.com/watch?v=jNQXAC9IVRw").valid).toBe(true);
-		expect(validateUrl("https://youtu.be/jNQXAC9IVRw").valid).toBe(true);
-		expect(validateUrl("https://www.youtube.com/shorts/jNQXAC9IVRw").valid).toBe(true);
+	it("should reject unsupported platforms", () => {
+		expect(validateUrl("https://instagram.com/p/ABC").valid).toBe(false);
+		expect(validateUrl("https://facebook.com/video/123").valid).toBe(false);
+		expect(validateUrl("https://www.youtube.com/watch?v=abc123").valid).toBe(false);
 	});
 
 	it("should reject empty URLs", () => {
@@ -52,9 +52,7 @@ describe("validateUrl", () => {
 		expect(
 			validateUrl("https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc").valid,
 		).toBe(true);
-		expect(validateUrl("https://www.youtube.com/watch?v=abc12345678&t=10s&list=foo").valid).toBe(
-			true,
-		);
+		expect(validateUrl("https://x.com/user/status/123?ref=foo&bar=baz").valid).toBe(true);
 	});
 
 	it("should reject invalid URL format", () => {
@@ -73,14 +71,9 @@ describe("detectPlatform", () => {
 		expect(detectPlatform("https://x.com/user/status/1234567890")).toBe("twitter");
 	});
 
-	it("should detect YouTube URLs", () => {
-		expect(detectPlatform("https://www.youtube.com/watch?v=jNQXAC9IVRw")).toBe("youtube");
-		expect(detectPlatform("https://youtu.be/jNQXAC9IVRw")).toBe("youtube");
-		expect(detectPlatform("https://www.youtube.com/shorts/jNQXAC9IVRw")).toBe("youtube");
-	});
-
 	it("should return null for unsupported platforms", () => {
 		expect(detectPlatform("https://www.instagram.com/p/ABC123")).toBeNull();
+		expect(detectPlatform("https://www.youtube.com/watch?v=jNQXAC9IVRw")).toBeNull();
 		expect(detectPlatform("not-a-url")).toBeNull();
 	});
 });
@@ -92,19 +85,9 @@ describe("extractContentId", () => {
 		);
 	});
 
-	it("should extract Twitter status ID", () => {
+	it("should extract X/Twitter status ID", () => {
 		expect(extractContentId("https://twitter.com/user/status/1234567890", "twitter")).toBe(
 			"1234567890",
-		);
-	});
-
-	it("should extract YouTube video ID from all URL shapes", () => {
-		expect(extractContentId("https://www.youtube.com/watch?v=jNQXAC9IVRw", "youtube")).toBe(
-			"jNQXAC9IVRw",
-		);
-		expect(extractContentId("https://youtu.be/jNQXAC9IVRw", "youtube")).toBe("jNQXAC9IVRw");
-		expect(extractContentId("https://www.youtube.com/shorts/jNQXAC9IVRw", "youtube")).toBe(
-			"jNQXAC9IVRw",
 		);
 	});
 
@@ -134,9 +117,7 @@ describe("validate", () => {
 
 describe("sanitizeUrl", () => {
 	it("should preserve safe query parameters", () => {
-		expect(sanitizeUrl("https://www.youtube.com/watch?v=ABC123")).toBe(
-			"https://www.youtube.com/watch?v=ABC123",
-		);
+		expect(sanitizeUrl("https://x.com/foo?ref=abc123")).toBe("https://x.com/foo?ref=abc123");
 	});
 
 	it("should remove dangerous query parameters", () => {

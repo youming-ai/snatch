@@ -2,7 +2,7 @@
  * Core type definitions shared between API and web
  */
 
-export type SupportedPlatform = "twitter" | "tiktok" | "youtube";
+export type SupportedPlatform = "twitter" | "tiktok";
 
 export interface VideoFormat {
 	format_id: string;

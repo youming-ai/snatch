@@ -1,5 +1,5 @@
 import { detectPlatform } from "@snatch/shared";
-import { CheckCircle, Loader2, Music, Twitter, XCircle, Youtube } from "lucide-react";
+import { CheckCircle, Loader2, Music, X, XCircle } from "lucide-react";
 import { useState } from "react";
 import type { DownloadResult as DownloadResultType } from "@/types/download";
 import { DownloaderInput } from "./DownloaderInput";
@@ -28,7 +28,7 @@ function DownloaderAppInner() {
 
 		const platform = detectPlatform(url);
 		if (!platform) {
-			setError("Unsupported platform. Please enter X (Twitter), TikTok, or YouTube URL");
+			setError("Unsupported platform. Please enter X or TikTok URL");
 			return;
 		}
 
@@ -65,9 +65,9 @@ function DownloaderAppInner() {
 
 	const supportedPlatforms = [
 		{
-			name: "X (Twitter)",
-			icon: <Twitter className="w-8 h-8" />,
-			description: "Download videos and images from X (Twitter)",
+			name: "X",
+			icon: <X className="w-8 h-8" />,
+			description: "Download videos and images from X",
 			status: "Working",
 			statusColor: "text-green-400",
 		},
@@ -75,13 +75,6 @@ function DownloaderAppInner() {
 			name: "TikTok",
 			icon: <Music className="w-8 h-8" />,
 			description: "Download videos from TikTok posts",
-			status: "Working",
-			statusColor: "text-green-400",
-		},
-		{
-			name: "YouTube",
-			icon: <Youtube className="w-8 h-8" />,
-			description: "Download videos and Shorts from YouTube",
 			status: "Working",
 			statusColor: "text-green-400",
 		},
@@ -116,7 +109,7 @@ function DownloaderAppInner() {
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							Grab videos from X (Twitter), TikTok, and YouTube. No watermarks, completely free.
+							Grab videos from X and TikTok. No watermarks, completely free.
 						</p>
 					</div>
 
@@ -187,7 +180,7 @@ function DownloaderAppInner() {
 						</p>
 					</div>
 
-					<div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
+					<div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
 						{supportedPlatforms.map((platform) => (
 							<div
 								key={platform.name}
@@ -225,19 +218,7 @@ function DownloaderAppInner() {
 												</div>
 											</>
 										)}
-										{platform.name === "YouTube" && (
-											<>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-red-400" />
-													<span>Up to 4K</span>
-												</div>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-red-400" />
-													<span>Shorts Supported</span>
-												</div>
-											</>
-										)}
-										{platform.name === "X (Twitter)" && (
+								{platform.name === "X" && (
 											<>
 												<div className="flex items-center gap-2 text-xs text-gray-400">
 													<CheckCircle className="w-3 h-3 text-blue-400" />

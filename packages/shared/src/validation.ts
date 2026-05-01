@@ -71,9 +71,7 @@ export function detectPlatform(url: string): SupportedPlatform | null {
  */
 export function extractContentId(url: string, platform: SupportedPlatform): string | null {
 	try {
-		// Match against the normalized full URL (href), not just pathname:
-		// YouTube IDs live in `?v=` (query) or in the `youtu.be` host, neither
-		// of which appear in `pathname`.
+		// Match against the normalized full URL (href), not just pathname.
 		const href = new URL(url).href;
 		const patterns = URL_PATTERNS[platform]?.patterns || [];
 
@@ -117,7 +115,7 @@ export function validate(url: string): ValidationSchema {
 
 	const platform = detectPlatform(trimmedUrl);
 	if (!platform) {
-		errors.push("Unsupported platform. Please use X (Twitter), TikTok, or YouTube URL");
+		errors.push("Unsupported platform. Please use X or TikTok URL");
 		return { isValid: false, errors };
 	}
 
@@ -226,7 +224,7 @@ export function isRetryableError(error: string): boolean {
 
 /**
  * Parse quality string to quality category.
- * Treats anything ≥720p as HD so 1920p/1280p (e.g. YouTube 4K) classify correctly.
+ * Treats anything ≥720p as HD so 1920p/1280p classify correctly.
  */
 export function parseQuality(quality: string): "hd" | "sd" | "audio" {
 	const q = quality.toLowerCase();
