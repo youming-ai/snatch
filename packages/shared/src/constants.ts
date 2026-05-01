@@ -52,7 +52,11 @@ export const URL_PATTERNS = {
 
 export const ALLOWED_PLATFORM_DOMAINS = ["instagram.com", "tiktok.com", "twitter.com", "x.com"];
 
-export const DANGEROUS_CHARS_REGEX = /[;&|$`\n\r\t\\<>]/;
+// Real share URLs never contain whitespace. We spawn yt-dlp via argv (no
+// shell), so shell metacharacters like `&;|$\`` cannot inject commands and
+// don't need to be filtered here — `new URL()` parsing + the platform domain
+// whitelist do the actual security work.
+export const DANGEROUS_CHARS_REGEX = /\s/;
 
 export const DANGEROUS_PROTOCOLS = ["javascript:", "data:", "vbscript:", "file:", "ftp:"];
 

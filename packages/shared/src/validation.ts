@@ -222,16 +222,15 @@ export function isRetryableError(error: string): boolean {
 }
 
 /**
- * Parse quality string to quality category
+ * Parse quality string to quality category.
+ * Treats anything ≥720p as HD so 1920p/1280p (e.g. Instagram) classify correctly.
  */
 export function parseQuality(quality: string): "hd" | "sd" | "audio" {
 	const q = quality.toLowerCase();
-	if (q.includes("1080") || q.includes("720") || q === "best" || q === "hd") {
-		return "hd";
-	}
-	if (q.includes("audio")) {
-		return "audio";
-	}
+	if (q.includes("audio")) return "audio";
+	if (q === "best" || q === "hd") return "hd";
+	const match = q.match(/(\d+)\s*p/);
+	if (match && parseInt(match[1], 10) >= 720) return "hd";
 	return "sd";
 }
 
