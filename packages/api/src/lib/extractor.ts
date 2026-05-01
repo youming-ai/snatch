@@ -19,7 +19,8 @@ export async function extractVideoInfo(url: string): Promise<ExtractResponse> {
 
 		if (exitCode !== 0) {
 			const stderr = await new Response(proc.stderr).text();
-			throw new Error(`yt-dlp error: ${stderr.trim()}`);
+			const firstLine = stderr.trim().split("\n")[0] || "yt-dlp failed";
+			throw new Error(`Extraction failed: ${firstLine}`);
 		}
 
 		const stdout = await new Response(proc.stdout).text();
@@ -32,34 +33,55 @@ export async function extractVideoInfo(url: string): Promise<ExtractResponse> {
 }
 
 /**
- * Download video using yt-dlp and stream to response
+ * Download video using yt-dlp and stream to response.
+ * Includes a 60s read timeout to kill stuck processes.
  */
-export function downloadVideoStream(url: string): ReadableStream<Uint8Array> {
+export function downloadVideoStream(url: string, formatId?: string): ReadableStream<Uint8Array> {
+	const formatArg = formatId || "best[ext=mp4]/best";
 	const proc = Bun.spawn(
-		["yt-dlp", "-o", "-", "--no-warnings", "--no-playlist", "-f", "best[ext=mp4]/best", url],
+		["yt-dlp", "-o", "-", "--no-warnings", "--no-playlist", "-f", formatArg, url],
 		{
 			stdout: "pipe",
 			stderr: "pipe",
 		},
 	);
 
+	const READ_TIMEOUT_MS = 60_000;
+	let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+	const resetTimeout = () => {
+		if (timeoutId) clearTimeout(timeoutId);
+		timeoutId = setTimeout(() => {
+			proc.kill();
+		}, READ_TIMEOUT_MS);
+	};
+
 	return new ReadableStream({
+		start() {
+			resetTimeout();
+		},
 		async pull(controller) {
 			const reader = proc.stdout.getReader();
 			try {
 				while (true) {
 					const { done, value } = await reader.read();
 					if (done) {
+						if (timeoutId) clearTimeout(timeoutId);
 						controller.close();
 						break;
 					}
+					resetTimeout();
 					controller.enqueue(value);
 				}
 			} catch (error) {
+				if (timeoutId) clearTimeout(timeoutId);
 				controller.error(error);
+			} finally {
+				reader.releaseLock();
 			}
 		},
 		cancel() {
+			if (timeoutId) clearTimeout(timeoutId);
 			proc.kill();
 		},
 	});
@@ -94,6 +116,7 @@ function extractFormats(json: any): VideoFormat[] {
 	// Try direct URL first
 	if (json.url) {
 		formats.push({
+			format_id: json.format_id || "best",
 			quality: "best",
 			url: json.url,
 			ext: json.ext || "mp4",
@@ -114,6 +137,7 @@ function extractFormats(json: any): VideoFormat[] {
 		for (const f of videoFormats) {
 			const height = f.height || 0;
 			formats.push({
+				format_id: f.format_id || "unknown",
 				quality: height > 0 ? `${height}p` : f.format_note || "unknown",
 				url: f.url,
 				ext: f.ext || "mp4",
@@ -127,6 +151,7 @@ function extractFormats(json: any): VideoFormat[] {
 		for (const d of json.requested_downloads) {
 			if (d.url) {
 				formats.push({
+					format_id: d.format_id || "best",
 					quality: "best",
 					url: d.url,
 					ext: d.ext || "mp4",
