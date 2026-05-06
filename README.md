@@ -120,7 +120,7 @@ ALLOWED_ORIGINS=https://snatch.example.com
 | `API_URL` | Web | API URL for local dev (`bun dev`) | `http://localhost:3001` |
 | `API_URL_INTERNAL` | Web | SSR-to-API internal URL (container network) | `http://api:3001` |
 | `API_URL_PUBLIC` | Web | API public origin for browser download links | `http://localhost:38701` |
-| `ALLOWED_ORIGINS` | API | CORS origins (comma-separated) | `""` (all) |
+| `ALLOWED_ORIGINS` | API | CORS origins (comma-separated) | `""` (reject all) |
 | `PORT` | Both | Server listen port | `3001` (API), `4321` (Web) |
 | `RATE_LIMIT_MAX` | API | Max requests per window | `10` |
 | `RATE_LIMIT_WINDOW` | API | Rate window (ms) | `60000` |
