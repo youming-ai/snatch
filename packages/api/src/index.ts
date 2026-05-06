@@ -17,8 +17,8 @@ app.use(
 				.map((s) => s.trim())
 				.filter(Boolean);
 			if (!allowed?.length) {
-				// No origins configured — reject cross-origin requests
-				return origin || "";
+				// No origins configured — reject all cross-origin requests
+				return "";
 			}
 			return allowed.includes(origin) ? origin : allowed[0];
 		},
