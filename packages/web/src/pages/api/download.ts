@@ -1,6 +1,7 @@
 import { formatFileSize, parseQuality } from "@snatch/shared";
 
 import type { APIRoute } from "astro";
+import { getConfig } from "@/config/env";
 import { checkRateLimit, getClientId, validateDownloadRequest } from "@/middleware/security";
 import type { DownloadFormat, DownloadResult, SupportedPlatform } from "@/types/download";
 
@@ -109,7 +110,7 @@ export const POST: APIRoute = async ({ request }) => {
 					status: 429,
 					headers: {
 						"Content-Type": "application/json",
-						"X-RateLimit-Limit": "10",
+						"X-RateLimit-Limit": getConfig().rateLimitMax.toString(),
 						"X-RateLimit-Remaining": "0",
 						"X-RateLimit-Reset": resetTime?.toString() || "",
 						"Retry-After": resetInMinutes.toString(),
@@ -186,7 +187,7 @@ export const POST: APIRoute = async ({ request }) => {
 				status: 200,
 				headers: {
 					"Content-Type": "application/json",
-					"X-RateLimit-Limit": "10",
+					"X-RateLimit-Limit": getConfig().rateLimitMax.toString(),
 					"X-RateLimit-Reset": rateLimitCheck.resetTime?.toString() || "",
 				},
 			},
