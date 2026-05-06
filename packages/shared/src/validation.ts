@@ -46,18 +46,9 @@ export function validateUrl(url: string): { valid: boolean; error?: string } {
 		};
 	}
 
-	let parsed: URL;
-	try {
-		parsed = new URL(trimmed);
-	} catch {
+	const parsed = parseHttpUrl(trimmed);
+	if (!parsed) {
 		return { valid: false, error: "Invalid URL format" };
-	}
-
-	if (!["http:", "https:"].includes(parsed.protocol)) {
-		return {
-			valid: false,
-			error: `Unsupported protocol '${parsed.protocol}'. Only HTTP and HTTPS are allowed.`,
-		};
 	}
 
 	const host = parsed.hostname.toLowerCase();
