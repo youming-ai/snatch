@@ -12,6 +12,10 @@ interface ClientData {
 
 const clients = new Map<string, ClientData>();
 
+export function clearClients(): void {
+	clients.clear();
+}
+
 function simpleHash(str: string): string {
 	let hash = 0;
 	for (let i = 0; i < str.length; i++) {
