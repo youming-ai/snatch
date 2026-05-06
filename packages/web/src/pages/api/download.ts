@@ -219,7 +219,7 @@ export const POST: APIRoute = async ({ request }) => {
 				status: isConnectionError ? 503 : 500,
 				headers: {
 					"Content-Type": "application/json",
-					"X-Error-ID": Math.random().toString(36).substring(2, 11),
+					"X-Error-ID": crypto.randomUUID(),
 				},
 			},
 		);
