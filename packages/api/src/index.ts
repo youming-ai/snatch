@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { logger } from "hono/logger";
+import { rateLimit } from "./middleware/rate-limit";
 import { downloadRouter } from "./routes/download";
 import { extractRouter } from "./routes/extract";
 import { healthRouter } from "./routes/health";
@@ -24,6 +25,13 @@ app.use(
 		},
 		allowMethods: ["GET", "POST", "OPTIONS"],
 		allowHeaders: ["Content-Type"],
+	}),
+);
+app.use(
+	"*",
+	rateLimit({
+		maxRequests: parseInt(process.env.API_RATE_LIMIT_MAX || "30", 10),
+		windowMs: parseInt(process.env.API_RATE_LIMIT_WINDOW || "60000", 10),
 	}),
 );
 
