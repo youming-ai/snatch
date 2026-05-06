@@ -1,6 +1,7 @@
 import {
 	ALLOWED_PLATFORM_DOMAINS,
 	DANGEROUS_CHARS_REGEX,
+	NON_RETRYABLE_PATTERNS,
 	PLATFORM_HOSTS,
 	URL_PATTERNS,
 } from "./constants";
@@ -228,14 +229,8 @@ export function sanitizeUrl(url: string): string {
  * Check if an error is retryable
  */
 export function isRetryableError(error: string): boolean {
-	const NON_RETRYABLE = [
-		"invalid url",
-		"unsupported platform",
-		"url contains",
-		"only http and https",
-	];
 	const errorLower = error.toLowerCase();
-	for (const pattern of NON_RETRYABLE) {
+	for (const pattern of NON_RETRYABLE_PATTERNS) {
 		if (errorLower.includes(pattern)) {
 			return false;
 		}
