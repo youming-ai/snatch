@@ -12,6 +12,18 @@ interface ClientData {
 
 const clients = new Map<string, ClientData>();
 
+if (typeof setInterval !== "undefined") {
+	setInterval(
+		() => {
+			const now = Date.now();
+			for (const [id, data] of clients.entries()) {
+				if (now > data.resetTime) clients.delete(id);
+			}
+		},
+		5 * 60 * 1000,
+	);
+}
+
 export function clearClients(): void {
 	clients.clear();
 }
@@ -35,18 +47,6 @@ function getClientId(c: { req: { header: (name: string) => string | undefined } 
 
 export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
 	const { maxRequests, windowMs } = options;
-
-	if (typeof setInterval !== "undefined") {
-		setInterval(
-			() => {
-				const now = Date.now();
-				for (const [id, data] of clients.entries()) {
-					if (now > data.resetTime) clients.delete(id);
-				}
-			},
-			5 * 60 * 1000,
-		);
-	}
 
 	return async (c, next) => {
 		const clientId = getClientId(c);
