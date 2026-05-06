@@ -1,9 +1,9 @@
 import {
 	ALLOWED_PLATFORM_DOMAINS,
-	DANGEROUS_CHARS_REGEX,
 	NON_RETRYABLE_PATTERNS,
 	PLATFORM_HOSTS,
 	URL_PATTERNS,
+	WHITESPACE_ONLY_REGEX,
 } from "./constants";
 import type { SupportedPlatform, ValidationSchema } from "./types";
 
@@ -39,7 +39,7 @@ export function validateUrl(url: string): { valid: boolean; error?: string } {
 
 	const trimmed = url.trim();
 
-	if (DANGEROUS_CHARS_REGEX.test(trimmed)) {
+	if (WHITESPACE_ONLY_REGEX.test(trimmed)) {
 		return {
 			valid: false,
 			error: "URL contains invalid characters. Only standard URL characters are allowed.",

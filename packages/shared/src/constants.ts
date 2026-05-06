@@ -48,9 +48,9 @@ export const ALLOWED_PLATFORM_DOMAINS = PLATFORM_DOMAINS;
 // shell), so shell metacharacters like `&;|$\`` cannot inject commands and
 // don't need to be filtered here — `new URL()` parsing + the platform domain
 // whitelist do the actual security work.
-export const DANGEROUS_CHARS_REGEX = /\s/;
+export const WHITESPACE_ONLY_REGEX = /\s/;
 
-export const DANGEROUS_PROTOCOLS = ["javascript:", "data:", "vbscript:", "file:", "ftp:"];
+export const DANGEROUS_PROTOCOLS = ["javascript:", "data:", "vbscript:", "file:", "ftp:"] as const;
 
 export const NON_RETRYABLE_PATTERNS = [
 	"invalid url",

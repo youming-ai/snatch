@@ -7,7 +7,7 @@ const RATE_LIMIT_WINDOW = 60_000;
 
 const requestCounts = new Map<string, { count: number; resetTime: number }>();
 
-function hashString(str: string): string {
+function simpleHash(str: string): string {
 	let hash = 0;
 	for (let i = 0; i < str.length; i++) {
 		hash = (hash << 5) - hash + str.charCodeAt(i);
@@ -38,10 +38,10 @@ export function checkRateLimit(clientId: string): { allowed: boolean; resetTime?
 
 export function getClientId(request: Request): string {
 	const trustedIp = request.headers.get("cf-connecting-ip") || request.headers.get("fly-client-ip");
-	if (trustedIp) return hashString(`ip:${trustedIp}`);
+	if (trustedIp) return simpleHash(`ip:${trustedIp}`);
 
 	const userAgent = request.headers.get("user-agent") || "unknown-agent";
-	return hashString(`fallback:${userAgent}`);
+	return simpleHash(`fallback:${userAgent}`);
 }
 
 export function validateDownloadRequest(
