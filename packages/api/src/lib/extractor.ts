@@ -1,4 +1,4 @@
-import type { ExtractResponse, VideoFormat } from "@snatch/shared";
+import { detectPlatform, type ExtractResponse, type VideoFormat } from "@snatch/shared";
 
 let ytDlpCommand = "yt-dlp";
 
@@ -109,7 +109,7 @@ export function downloadVideoStream(url: string, formatId?: string): ReadableStr
  */
 // biome-ignore lint/suspicious/noExplicitAny: yt-dlp JSON output is dynamic
 function parseYtDlpOutput(json: any, url: string): ExtractResponse {
-	const platform = detectPlatform(url);
+	const platform = detectPlatform(url) || "unknown";
 	const title = json.title || "Untitled";
 	const thumbnail = json.thumbnail || undefined;
 	const formats = extractFormats(json);
@@ -199,21 +199,4 @@ function extractFormats(json: any): VideoFormat[] {
 	}
 
 	return [];
-}
-
-/**
- * Detect platform from URL
- */
-function detectPlatform(url: string): string {
-	const host = (() => {
-		try {
-			return new URL(url).hostname.toLowerCase();
-		} catch {
-			return "";
-		}
-	})();
-
-	if (host.includes("tiktok.com")) return "tiktok";
-	if (host.includes("x.com") || host.includes("twitter.com")) return "twitter";
-	return "unknown";
 }
