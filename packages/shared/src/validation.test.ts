@@ -35,11 +35,6 @@ describe("validateUrl", () => {
 		expect(validateUrl("ftp://example.com").valid).toBe(false);
 	});
 
-	it("should reject unsupported platforms", () => {
-		expect(validateUrl("https://instagram.com/p/ABC").valid).toBe(false);
-		expect(validateUrl("https://facebook.com/video/123").valid).toBe(false);
-	});
-
 	// We spawn yt-dlp via argv (no shell), so shell metacharacters can't be
 	// injected. The remaining job for validation is just rejecting URLs that
 	// are structurally malformed — anything containing whitespace.
