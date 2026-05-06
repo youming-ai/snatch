@@ -16,7 +16,10 @@ app.use(
 			const allowed = process.env.ALLOWED_ORIGINS?.split(",")
 				.map((s) => s.trim())
 				.filter(Boolean);
-			if (!allowed?.length) return origin || "*";
+			if (!allowed?.length) {
+				// No origins configured — reject cross-origin requests
+				return origin || "";
+			}
 			return allowed.includes(origin) ? origin : allowed[0];
 		},
 		allowMethods: ["GET", "POST", "OPTIONS"],
