@@ -79,7 +79,7 @@ bun docker:down    # docker compose down
 - **Single package manager**: Bun workspaces; do NOT add `node_modules` from npm/yarn/pnpm.
 - **No SSR**. No separate web tier. No SSR runtime, no `next`, no astro runtime.
 - **Browser-exposed env vars must use `VITE_` prefix**.
-- **The API does not shell out** — there are no system binaries in the runtime image. Media resolution is HTTP only.
+ - **The API only shells out to `ffmpeg`** for local-processing remuxing. All other media resolution is HTTP-only; there are no other system binaries.
 - **Bun test root** is the repo root (`bunfig.toml`), so test files anywhere match `*.test.ts` / `*.test.tsx`.
 
 ## Code Conventions
@@ -116,6 +116,7 @@ bun docker:down    # docker compose down
 | `COBALT_API_URL` | API | `http://localhost:9000` | Internal cobalt instance. Inside docker-compose: `http://cobalt:9000`. |
 | `STATIC_ROOT` | API | `./public` | Override the SPA static dir |
 | `VITE_API_TARGET` | web (dev) | `http://localhost:3001` | Vite dev proxy target for `/api` |
+| `PROXY_SIGNING_KEY` | API | `""` (random) | HMAC key to sign media proxy links to prevent SSRF. If empty, a random key is generated at startup. |
 
 ## Pre-Commit / Pre-Push Hooks (Husky)
 

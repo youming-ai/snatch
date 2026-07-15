@@ -1,7 +1,4 @@
-export interface CobaltResolved {
-	url: string;
-	filename: string;
-}
+import type { CobaltOptions, CobaltResponse } from "@snatch/shared";
 
 const DEFAULT_COBALT_API_URL = "http://localhost:9000";
 
@@ -15,23 +12,38 @@ export function resetCobaltApiUrlForTest(): void {
 	cobaltApiUrl = process.env.COBALT_API_URL || DEFAULT_COBALT_API_URL;
 }
 
-interface CobaltResponse {
-	status: "tunnel" | "redirect" | "picker" | "local-processing" | "error";
-	url?: string;
-	filename?: string;
-	picker?: { type: string; url: string }[];
-	error?: { code?: string };
+/**
+ * Fetch dynamic configuration and capabilities from the cobalt instance.
+ */
+export async function getCobaltInfo(): Promise<unknown> {
+	const base = cobaltApiUrl.replace(/\/+$/, "");
+	try {
+		const res = await fetch(`${base}/`, {
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+			},
+			signal: AbortSignal.timeout(10_000),
+		});
+		if (!res.ok) {
+			throw new Error(`HTTP ${res.status}`);
+		}
+		return await res.json();
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : "request failed";
+		throw new Error(`failed to query cobalt instance: ${msg}`);
+	}
 }
 
 /**
- * Resolve a downloadable file URL for `url` via a self-hosted cobalt instance.
- *
- * cobalt handles format selection and muxing/remuxing server-side; it returns
- * either a `tunnel` (cobalt proxies the file) or `redirect` (direct CDN link)
- * URL. The caller proxies that URL so the browser only ever talks to our
- * origin — cobalt itself stays internal-only.
+ * Resolve a downloadable media response for `url` via a self-hosted cobalt instance.
+ * Accepts all cobalt options and headers (e.g. Turnstile tokens or API keys).
  */
-export async function resolveViaCobalt(url: string, videoQuality: string): Promise<CobaltResolved> {
+export async function resolveViaCobalt(
+	url: string,
+	options: CobaltOptions,
+	headers?: Record<string, string>,
+): Promise<CobaltResponse> {
 	const base = cobaltApiUrl.replace(/\/+$/, "");
 
 	let res: Response;
@@ -41,12 +53,11 @@ export async function resolveViaCobalt(url: string, videoQuality: string): Promi
 			headers: {
 				Accept: "application/json",
 				"Content-Type": "application/json",
+				...headers,
 			},
 			body: JSON.stringify({
 				url,
-				videoQuality,
-				downloadMode: "auto",
-				filenameStyle: "basic",
+				...options,
 			}),
 			signal: AbortSignal.timeout(30_000),
 		});
@@ -55,21 +66,16 @@ export async function resolveViaCobalt(url: string, videoQuality: string): Promi
 		throw new Error(`cobalt request failed: ${msg}`);
 	}
 
-	const data = (await res.json()) as CobaltResponse;
-
-	switch (data.status) {
-		case "tunnel":
-		case "redirect":
-			if (!data.url) throw new Error("cobalt returned no url");
-			return { url: data.url, filename: data.filename || "video.mp4" };
-		case "picker": {
-			const item = data.picker?.find((p) => p.type === "video") ?? data.picker?.[0];
-			if (!item?.url) throw new Error("cobalt picker contained no downloadable media");
-			return { url: item.url, filename: data.filename || "video.mp4" };
-		}
-		case "error":
-			throw new Error(`cobalt error: ${data.error?.code || "unknown"}`);
-		default:
-			throw new Error(`cobalt returned unexpected status: ${data.status}`);
+	if (!res.ok) {
+		const text = await res.text().catch(() => "");
+		try {
+			const errJson = JSON.parse(text);
+			if (errJson.status === "error" && errJson.error) {
+				return errJson;
+			}
+		} catch {}
+		throw new Error(`cobalt upstream error: HTTP ${res.status} ${text}`);
 	}
+
+	return (await res.json()) as CobaltResponse;
 }

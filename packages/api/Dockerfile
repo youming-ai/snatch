@@ -33,13 +33,13 @@ RUN bun run build
 
 # =============================================================================
 # Stage 2: Runtime — Bun + the API bundle + the SPA static files. The API
-#          shells out to no binaries (media is resolved/streamed via cobalt),
-#          so only CA certificates (for outbound HTTPS) are needed.
+#          shells out to ffmpeg for local-processing remuxing, so both
+#          CA certificates and ffmpeg are needed.
 # =============================================================================
 FROM oven/bun:1.3.11-slim AS runtime
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

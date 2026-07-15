@@ -16,6 +16,8 @@ services:
       - API_RATE_LIMIT_WINDOW=${API_RATE_LIMIT_WINDOW:-60000}
       # Internal cobalt instance used for the actual file resolution/streaming.
       - COBALT_API_URL=${COBALT_API_URL:-http://cobalt:9000}
+      # Signing key to secure media proxy links (keeps links stable on restart)
+      - PROXY_SIGNING_KEY=${PROXY_SIGNING_KEY:-}
     depends_on:
       - cobalt
     restart: unless-stopped
