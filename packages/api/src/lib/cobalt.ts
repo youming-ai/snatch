@@ -15,8 +15,8 @@ export function resetCobaltApiUrlForTest(): void {
 /**
  * Fetch dynamic configuration and capabilities from the cobalt instance.
  */
-export async function getCobaltInfo(): Promise<unknown> {
-	const base = cobaltApiUrl.replace(/\/+$/, "");
+export async function getCobaltInfo(apiBaseUrl?: string): Promise<unknown> {
+	const base = (apiBaseUrl || cobaltApiUrl).replace(/\/+$/, "");
 	try {
 		const res = await fetch(`${base}/`, {
 			method: "GET",
@@ -43,8 +43,9 @@ export async function resolveViaCobalt(
 	url: string,
 	options: CobaltOptions,
 	headers?: Record<string, string>,
+	apiBaseUrl?: string,
 ): Promise<CobaltResponse> {
-	const base = cobaltApiUrl.replace(/\/+$/, "");
+	const base = (apiBaseUrl || cobaltApiUrl).replace(/\/+$/, "");
 
 	let res: Response;
 	try {

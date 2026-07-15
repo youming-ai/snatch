@@ -1,45 +1,9 @@
-import { Hono } from "hono";
 import { serveStatic } from "hono/bun";
-import { cors } from "hono/cors";
-import { logger } from "hono/logger";
-import { rateLimit } from "./middleware/rate-limit";
-import { downloadRouter } from "./routes/download";
-import { healthRouter } from "./routes/health";
+import app from "./app";
+import { localProcessRouter } from "./routes/local-process";
 
-const app = new Hono();
-
-app.use("*", logger());
-
-// CORS + rate limiting apply only to the API surface, never to static assets.
-app.use(
-	"/api/*",
-	cors({
-		origin: (origin) => {
-			const allowed = process.env.ALLOWED_ORIGINS?.split(",")
-				.map((s) => s.trim())
-				.filter(Boolean);
-			if (!allowed?.length) {
-				// No origins configured — reject all cross-origin requests.
-				return "";
-			}
-			return allowed.includes(origin) ? origin : allowed[0];
-		},
-		allowMethods: ["GET", "POST", "OPTIONS"],
-		allowHeaders: ["Content-Type"],
-	}),
-);
-app.use(
-	"/api/*",
-	rateLimit({
-		maxRequests: parseInt(process.env.API_RATE_LIMIT_MAX || "30", 10),
-		windowMs: parseInt(process.env.API_RATE_LIMIT_WINDOW || "60000", 10),
-	}),
-);
-
-// API routes.
-app.route("/", downloadRouter);
-app.route("/", healthRouter);
-
+// Register Bun-only local processing route
+app.route("/", localProcessRouter);
 // Serve the built SPA (packages/web/dist, copied to ./public in the Docker
 // image). Falls through to 404 when the dir is absent — e.g. local API dev,
 // where the Vite dev server serves the UI and proxies /api here.
