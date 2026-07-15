@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { env } from "hono/adapter";
 
 interface RateLimitOptions {
 	maxRequests: number;
@@ -12,16 +13,18 @@ interface ClientData {
 
 const clients = new Map<string, ClientData>();
 
-if (typeof setInterval !== "undefined") {
-	setInterval(
-		() => {
-			const now = Date.now();
-			for (const [id, data] of clients.entries()) {
-				if (now > data.resetTime) clients.delete(id);
-			}
-		},
-		5 * 60 * 1000,
-	);
+if (typeof setInterval !== "undefined" && typeof Bun !== "undefined") {
+	try {
+		setInterval(
+			() => {
+				const now = Date.now();
+				for (const [id, data] of clients.entries()) {
+					if (now > data.resetTime) clients.delete(id);
+				}
+			},
+			5 * 60 * 1000,
+		);
+	} catch {}
 }
 
 export function clearClients(): void {
@@ -45,10 +48,13 @@ function getClientId(c: { req: { header: (name: string) => string | undefined } 
 	return simpleHash(`fallback:${userAgent}`);
 }
 
-export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
-	const { maxRequests, windowMs } = options;
-
+export function rateLimit(options?: Partial<RateLimitOptions>): MiddlewareHandler {
 	return async (c, next) => {
+		const envVars = env(c);
+		const maxRequests =
+			options?.maxRequests ?? parseInt((envVars.API_RATE_LIMIT_MAX as string) || "30", 10);
+		const windowMs =
+			options?.windowMs ?? parseInt((envVars.API_RATE_LIMIT_WINDOW as string) || "60000", 10);
 		const clientId = getClientId(c);
 		const now = Date.now();
 		const clientData = clients.get(clientId);
