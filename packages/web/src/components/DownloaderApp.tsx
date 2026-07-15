@@ -1,10 +1,10 @@
-import { detectPlatform } from "@snatch/shared";
-import { CheckCircle, Loader2, Music, X, XCircle } from "lucide-react";
-import { useState } from "react";
-import type { DownloadResult as DownloadResultType } from "@/types/download";
+import { detectPlatform, SERVICES } from "@snatch/shared";
+import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { DownloaderInput } from "./DownloaderInput";
-import { DownloadResult } from "./DownloadResult";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { DEFAULT_SETTINGS, SettingsDrawer, type SettingsState } from "./SettingsDrawer";
+import { Turnstile } from "./Turnstile";
 
 export function DownloaderApp() {
 	return (
@@ -14,71 +14,189 @@ export function DownloaderApp() {
 	);
 }
 
+interface PickerItem {
+	type: "photo" | "video" | "gif";
+	url: string;
+	thumb?: string;
+}
+
+interface PickerResponse {
+	status: "picker";
+	picker?: PickerItem[];
+	audio?: string;
+	audioFilename?: string;
+	filename?: string;
+}
+
 function DownloaderAppInner() {
+	// Settings & Drawer
+	const [settings, setSettings] = useState<SettingsState>(() => {
+		try {
+			const saved = localStorage.getItem("snatch_settings");
+			return saved ? { ...DEFAULT_SETTINGS, ...JSON.parse(saved) } : DEFAULT_SETTINGS;
+		} catch {
+			return DEFAULT_SETTINGS;
+		}
+	});
+	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+	// Core State
 	const [url, setUrl] = useState("");
 	const [loading, setLoading] = useState(false);
-	const [results, setResults] = useState<DownloadResultType[]>([]);
 	const [error, setError] = useState<string | null>(null);
+	const [savedName, setSavedName] = useState<string | null>(null);
 
-	const handleDownload = async () => {
+	// Multi-Media Picker State
+	const [pickerResponse, setPickerResponse] = useState<PickerResponse | null>(null);
+
+	// Turnstile State
+	const [backendSitekey, setBackendSitekey] = useState<string | null>(null);
+	const [showTurnstile, setShowTurnstile] = useState(false);
+	const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+
+	// Dynamic Cobalt Backend Service Capabilities
+	const [allowedServiceIds, setAllowedServiceIds] = useState<string[] | null>(null);
+
+	// Sync settings to localStorage
+	const handleSettingsChange = (nextSettings: SettingsState) => {
+		setSettings(nextSettings);
+		try {
+			localStorage.setItem("snatch_settings", JSON.stringify(nextSettings));
+		} catch (err) {
+			console.error("Failed to save settings:", err);
+		}
+	};
+
+	// Query backend status / turnstile on mount
+	useEffect(() => {
+		fetch("/api/info")
+			.then((res) => res.json())
+			.then((data) => {
+				const details = data as {
+					cobalt?: { services?: string[]; turnstileSitekey?: string };
+				};
+				if (details.cobalt) {
+					if (details.cobalt.services && Array.isArray(details.cobalt.services)) {
+						setAllowedServiceIds(details.cobalt.services);
+					}
+					if (details.cobalt.turnstileSitekey) {
+						setBackendSitekey(details.cobalt.turnstileSitekey);
+					}
+				}
+			})
+			.catch((err) => console.error("Failed to query backend capabilities:", err));
+	}, []);
+
+	const handleUrlChange = (next: string) => {
+		setUrl(next);
+		if (error) setError(null);
+		if (savedName) setSavedName(null);
+		if (pickerResponse) setPickerResponse(null);
+	};
+
+	const triggerDownload = useCallback((downloadUrl: string) => {
+		const anchor = document.createElement("a");
+		anchor.href = downloadUrl;
+		anchor.download = ""; // Filename is governed by Content-Disposition header
+		document.body.appendChild(anchor);
+		anchor.click();
+		anchor.remove();
+	}, []);
+
+	const handleDownload = async (forcedToken?: string) => {
 		if (!url?.trim()) {
 			setError("Please enter a valid URL");
 			return;
 		}
 
-		const platform = detectPlatform(url);
-		if (!platform) {
-			setError("Unsupported platform. Please enter X or TikTok URL");
+		if (!detectPlatform(url)) {
+			setError("Unsupported link. Paste a URL from one of the services listed below.");
 			return;
 		}
 
 		setLoading(true);
 		setError(null);
-		setResults([]);
+		setSavedName(null);
+		setPickerResponse(null);
+
+		const { apiKey, ...cobaltOptions } = settings;
+
+		const headers: Record<string, string> = {
+			"Content-Type": "application/json",
+		};
+		if (apiKey) {
+			headers.Authorization = `Api-Key ${apiKey}`;
+		}
+		const token = forcedToken || turnstileToken;
+		if (token) {
+			headers["cf-turnstile-response"] = token;
+		}
 
 		try {
-			const response = await fetch("/api/download", {
+			const response = await fetch("/api/resolve", {
 				method: "POST",
-				headers: {
-					"Content-Type": "application/json",
-				},
-				body: JSON.stringify({ url }),
+				headers,
+				body: JSON.stringify({
+					url: url.trim(),
+					...cobaltOptions,
+				}),
 			});
 
-			const data = await response.json();
-
 			if (!response.ok) {
-				throw new Error(data.error || "Failed to download content");
+				const errData = (await response.json().catch(() => ({}))) as { error?: string };
+				throw new Error(errData.error || "Failed to resolve media");
 			}
 
-			const downloadResults = data.success ? data.results || [] : [];
-			setResults(downloadResults);
+			interface ResolveJson {
+				status: "tunnel" | "redirect" | "picker" | "error";
+				url?: string;
+				filename?: string;
+				picker?: PickerItem[];
+				audio?: string;
+				audioFilename?: string;
+				error?: { code?: string };
+			}
+
+			const data = (await response.json()) as ResolveJson;
+
+			if (data.status === "error") {
+				const errorCode = data.error?.code || "";
+				if (errorCode.includes("turnstile.missing") && backendSitekey) {
+					setShowTurnstile(true);
+					setError("Verification required. Please solve the security widget below.");
+				} else {
+					throw new Error(errorCode || "Cobalt resolved with an error");
+				}
+				return;
+			}
+
+			if (data.status === "tunnel" || data.status === "redirect") {
+				if (!data.url) throw new Error("No download URL returned");
+				triggerDownload(data.url);
+				setSavedName(data.filename || "file");
+				// Hide Turnstile once successfully solved and cleared
+				setShowTurnstile(false);
+			} else if (data.status === "picker") {
+				setPickerResponse(data as PickerResponse);
+				setShowTurnstile(false);
+			}
 		} catch (err) {
-			console.error("Download error:", err);
-			setError(
-				err instanceof Error ? err.message : "Failed to download content. Please try again.",
-			);
+			console.error("Resolution error:", err);
+			setError(err instanceof Error ? err.message : "Failed to resolve content. Please try again.");
 		} finally {
 			setLoading(false);
 		}
 	};
 
-	const supportedPlatforms = [
-		{
-			name: "X",
-			icon: <X className="w-8 h-8" />,
-			description: "Download videos and images from X",
-			status: "Working",
-			statusColor: "text-green-400",
-		},
-		{
-			name: "TikTok",
-			icon: <Music className="w-8 h-8" />,
-			description: "Download videos from TikTok posts",
-			status: "Working",
-			statusColor: "text-green-400",
-		},
-	];
+	const handleTurnstileVerify = (token: string) => {
+		setTurnstileToken(token);
+		// Retrigger download immediately upon verification
+		handleDownload(token);
+	};
+
+	const activeServices = SERVICES.filter(
+		(s) => !allowedServiceIds || allowedServiceIds.includes(s.id),
+	);
 
 	return (
 		<div className="min-h-screen bg-black text-white selection:bg-purple-500/30">
@@ -89,8 +207,20 @@ function DownloaderAppInner() {
 				<div className="absolute top-[20%] right-[10%] w-[30%] h-[30%] rounded-full bg-pink-600/10 blur-[100px]" />
 			</div>
 
+			{/* Settings Toggle and Main Page Header Overlay */}
+			<div className="absolute top-6 right-6 z-20">
+				<button
+					type="button"
+					onClick={() => setIsSettingsOpen(true)}
+					aria-label="Settings"
+					className="p-3 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 hover:border-white/20 transition-all text-zinc-300 hover:text-white flex items-center justify-center"
+				>
+					<Settings className="w-5 h-5" />
+				</button>
+			</div>
+
 			{/* Main Content */}
-			<div className="relative z-10 container mx-auto px-4 py-20 md:py-32 space-y-24">
+			<div className="relative z-10 container mx-auto px-4 py-20 md:py-32 space-y-20">
 				{/* Hero Section */}
 				<div className="text-center space-y-10 max-w-4xl mx-auto">
 					<div className="space-y-6">
@@ -99,7 +229,9 @@ function DownloaderAppInner() {
 								<span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
 								<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
 							</span>
-							<span className="text-sm font-medium text-gray-300">v1.0 Now Available</span>
+							<span className="text-sm font-medium text-gray-300">
+								{activeServices.length}+ services supported
+							</span>
 						</div>
 
 						<h1 className="text-5xl md:text-7xl font-bold tracking-tight animate-in fade-in slide-in-from-bottom-8 duration-700 delay-100">
@@ -109,7 +241,8 @@ function DownloaderAppInner() {
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							Grab videos from X and TikTok. No watermarks, completely free.
+							Paste a link, get the file. Videos, audio and images from your favorite platforms — no
+							watermarks, no signup, completely free.
 						</p>
 					</div>
 
@@ -117,11 +250,26 @@ function DownloaderAppInner() {
 					<div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
 						<DownloaderInput
 							url={url}
-							onUrlChange={setUrl}
-							onDownload={handleDownload}
+							onUrlChange={handleUrlChange}
+							onDownload={() => handleDownload()}
 							loading={loading}
 						/>
 					</div>
+
+					{/* Turnstile Widget */}
+					{showTurnstile && backendSitekey && (
+						<div className="max-w-md mx-auto p-4 bg-zinc-900 border border-zinc-800 rounded-2xl animate-in fade-in duration-300">
+							<Turnstile
+								sitekey={backendSitekey}
+								onVerify={handleTurnstileVerify}
+								onExpire={() => setTurnstileToken(null)}
+								onError={() => {
+									setTurnstileToken(null);
+									setError("Security verification failed. Please try again.");
+								}}
+							/>
+						</div>
+					)}
 
 					{error && (
 						<div className="max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
@@ -135,28 +283,112 @@ function DownloaderAppInner() {
 							</div>
 						</div>
 					)}
-				</div>
 
-				{/* Results Section */}
-				{results.length > 0 && (
-					<div className="space-y-10 animate-in fade-in slide-in-from-bottom-12 duration-700">
-						<div className="flex items-center justify-between border-b border-white/10 pb-6">
-							<h2 className="text-3xl font-bold text-white">Download Results</h2>
-							<span className="text-sm text-gray-400">{results.length} items found</span>
-						</div>
-						<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-							{results.map((result, index) => (
-								<div
-									key={result.id || `result-${index}`}
-									className="animate-in slide-in-from-bottom-4 fade-in duration-500"
-									style={{ animationDelay: `${index * 100}ms` }}
-								>
-									<DownloadResult result={result} />
+					{savedName && (
+						<div className="max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
+							<div
+								role="status"
+								aria-live="polite"
+								className="p-4 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center gap-3 text-left"
+							>
+								<CheckCircle className="w-5 h-5 shrink-0 text-green-400" />
+								<div className="min-w-0 flex-1">
+									<p className="text-sm font-medium text-green-300">Download started</p>
+									<p className="text-xs text-gray-400 truncate font-mono">{savedName}</p>
 								</div>
-							))}
+								<button
+									type="button"
+									onClick={() => handleDownload()}
+									className="shrink-0 text-xs font-medium text-green-300 hover:text-green-200 underline underline-offset-2"
+								>
+									Again
+								</button>
+								<button
+									type="button"
+									aria-label="Dismiss"
+									onClick={() => setSavedName(null)}
+									className="shrink-0 text-gray-500 hover:text-white transition-colors"
+								>
+									<X className="w-4 h-4" />
+								</button>
+							</div>
 						</div>
-					</div>
-				)}
+					)}
+
+					{/* Multi-Media Picker Panel */}
+					{pickerResponse?.picker && (
+						<div className="max-w-4xl mx-auto space-y-6 text-left animate-in fade-in zoom-in duration-300 p-6 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
+							<div className="flex items-center justify-between">
+								<div>
+									<h3 className="text-lg font-bold text-white">Choose media to download</h3>
+									<p className="text-xs text-zinc-500 mt-1">
+										This post contains multiple assets. Select items to download them.
+									</p>
+								</div>
+								<button
+									type="button"
+									onClick={() => setPickerResponse(null)}
+									className="p-1 px-3 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-white/5"
+								>
+									Clear selection
+								</button>
+							</div>
+
+							<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+								{pickerResponse.picker.map((item) => (
+									<div
+										key={item.url}
+										className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col group"
+									>
+										<div className="aspect-square bg-zinc-950 relative overflow-hidden flex items-center justify-center">
+											{item.thumb ? (
+												<img
+													src={item.thumb}
+													alt={item.type}
+													className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+												/>
+											) : (
+												<span className="text-zinc-500 capitalize text-xs">{item.type}</span>
+											)}
+											<span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[9px] uppercase font-bold text-zinc-300 tracking-wider">
+												{item.type}
+											</span>
+										</div>
+										<div className="p-3">
+											<button
+												type="button"
+												onClick={() => triggerDownload(item.url)}
+												className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
+											>
+												<Download className="w-3.5 h-3.5" />
+												Download
+											</button>
+										</div>
+									</div>
+								))}
+							</div>
+
+							{pickerResponse.audio && (
+								<div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between gap-4">
+									<div className="min-w-0 flex-1">
+										<p className="text-sm font-semibold text-zinc-200">Background Audio</p>
+										<p className="text-xs text-zinc-500 truncate font-mono mt-0.5">
+											{pickerResponse.audioFilename || "audio.mp3"}
+										</p>
+									</div>
+									<button
+										type="button"
+										onClick={() => triggerDownload(pickerResponse.audio || "")}
+										className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
+									>
+										<Download className="w-3.5 h-3.5" />
+										Download Audio
+									</button>
+								</div>
+							)}
+						</div>
+					)}
+				</div>
 
 				{/* Loading State */}
 				{loading && (
@@ -166,87 +398,46 @@ function DownloaderAppInner() {
 							<Loader2 className="w-12 h-12 animate-spin text-purple-400 relative z-10" />
 						</div>
 						<div className="text-center space-y-2">
-							<h3 className="text-xl font-semibold text-white">Extracting Content</h3>
+							<h3 className="text-xl font-semibold text-white">Preparing your download</h3>
 							<p className="text-gray-400">
-								Please wait while we fetch the highest quality media...
+								Fetching the highest quality media — long videos may take a moment...
 							</p>
 						</div>
 					</div>
 				)}
 
-				{/* Supported Platforms */}
-				<div className="space-y-12">
-					<div className="text-center space-y-4">
-						<h2 className="text-3xl md:text-4xl font-bold">Supported Platforms</h2>
-						<p className="text-gray-400 max-w-2xl mx-auto">
-							We support the most popular social media platforms with specialized extraction
-							engines.
+				{/* Supported Services */}
+				<div className="space-y-8 max-w-4xl mx-auto">
+					<div className="text-center space-y-3">
+						<h2 className="text-2xl md:text-3xl font-bold">Supported services</h2>
+						<p className="text-gray-400 max-w-2xl mx-auto text-sm">
+							Paste a link from any of these and Snatch grabs the original file.
 						</p>
 					</div>
 
-					<div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-						{supportedPlatforms.map((platform) => (
-							<div
-								key={platform.name}
-								className="group relative p-8 rounded-3xl bg-white/5 border border-white/10 hover:border-white/20 transition-all duration-300 hover:-translate-y-1 overflow-hidden"
+					<div className="flex flex-wrap justify-center gap-2.5">
+						{activeServices.map((service) => (
+							<span
+								key={service.id}
+								className="px-3.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 hover:border-white/25 hover:text-white transition-colors animate-in fade-in duration-300"
 							>
-								<div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-								<div className="relative z-10 space-y-6">
-									<div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-										{platform.icon}
-									</div>
-
-									<div>
-										<div className="flex items-center justify-between mb-2">
-											<h3 className="text-xl font-bold text-white">{platform.name}</h3>
-											<span
-												className={`text-xs font-medium px-2 py-1 rounded-full bg-white/5 ${platform.statusColor}`}
-											>
-												{platform.status}
-											</span>
-										</div>
-										<p className="text-sm text-gray-400 leading-relaxed">{platform.description}</p>
-									</div>
-
-									<div className="pt-6 border-t border-white/5 space-y-2">
-										{platform.name === "TikTok" && (
-											<>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-green-400" />
-													<span>No Watermark</span>
-												</div>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-green-400" />
-													<span>Full HD Quality</span>
-												</div>
-											</>
-										)}
-										{platform.name === "X" && (
-											<>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-blue-400" />
-													<span>Videos & GIFs</span>
-												</div>
-												<div className="flex items-center gap-2 text-xs text-gray-400">
-													<CheckCircle className="w-3 h-3 text-blue-400" />
-													<span>High Resolution</span>
-												</div>
-											</>
-										)}
-									</div>
-								</div>
-							</div>
+								{service.label}
+							</span>
 						))}
 					</div>
+
+					<p className="text-center text-xs text-gray-600 max-w-2xl mx-auto leading-relaxed">
+						Support for a service means technical compatibility only — it does not imply
+						affiliation, endorsement, or any other relationship.
+					</p>
 				</div>
 
-				{/* Features Grid */}
-				<div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto pt-12 border-t border-white/5">
+				{/* Features */}
+				<div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto pt-8 border-t border-white/5">
 					{[
 						{
 							title: "Lightning Fast",
-							description: "Optimized extraction engine ensures downloads start in seconds.",
+							description: "Optimized extraction ensures downloads start in seconds.",
 							icon: "⚡",
 						},
 						{
@@ -268,6 +459,14 @@ function DownloaderAppInner() {
 					))}
 				</div>
 			</div>
+
+			{/* Settings Drawer Slider */}
+			<SettingsDrawer
+				isOpen={isSettingsOpen}
+				onClose={() => setIsSettingsOpen(false)}
+				settings={settings}
+				onSettingsChange={handleSettingsChange}
+			/>
 		</div>
 	);
 }

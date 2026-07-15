@@ -1,6 +1,6 @@
 # Snatch
 
-Social media video downloader — Bun monorepo with Hono API and Astro frontend.
+Social media video downloader — Bun monorepo: a React + Vite SPA served by a Hono API that resolves media via a self-hosted cobalt instance.
 
 ## Supported Platforms
 
@@ -17,16 +17,16 @@ snatch/
 ├── packages/
 │   ├── api/                # Bun + Hono API server
 │   │   ├── src/
-│   │   │   ├── routes/     # /health, /api/extract, /api/download
-│   │   │   └── lib/        # Cache, extractor, retry
+│   │   │   ├── routes/     # /health, /api/download
+│   │   │   └── lib/        # cobalt (resolver)
 │   │   └── test/
-│   ├── web/                # Astro 5 + React 19 frontend
+│   ├── web/                # React 19 + Vite SPA (static)
+│   │   ├── index.html      # Vite entry
 │   │   ├── src/
-│   │   │   ├── components/ # DownloaderApp, DownloaderInput, DownloadResult
-│   │   │   ├── middleware/ # Rate limiting, security validation
-│   │   │   ├── pages/      # index.astro, api/download.ts
-│   │   │   └── types/
-│   │   └── public/
+│   │   │   ├── components/ # DownloaderApp, DownloaderInput, ErrorBoundary
+│   │   │   ├── main.tsx    # React root
+│   │   │   └── styles.css
+│   │   └── public/         # favicon, logos, manifest, robots.txt
 │   └── shared/             # Types, validation, constants (zero deps)
 │       └── src/
 ├── docker-compose.yml
@@ -39,7 +39,7 @@ snatch/
 ### Prerequisites
 
 - [Bun](https://bun.sh/) >= 1.3
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) (for local API dev; Docker image includes it)
+- A reachable [cobalt](https://github.com/imputnet/cobalt) instance (`docker compose` starts one; for local API dev run cobalt on `:9000`)
 
 ### Install
 
@@ -54,9 +54,9 @@ bun install
 bun dev:api
 # -> http://localhost:3001
 
-# Terminal 2: Start frontend (hot reload)
+# Terminal 2: Start frontend (Vite dev server, proxies /api → :3001)
 bun dev
-# -> http://localhost:4321
+# -> http://localhost:5173
 ```
 
 ### Testing
@@ -88,69 +88,61 @@ bun run format           # format only
 cp .env.example .env
 docker compose up -d --build
 
-# API  -> http://localhost:38701
-# Web  -> http://localhost:38700
+# App (UI + API) -> http://localhost:38700
 ```
 
-The web service depends on the API being healthy. Startup order is handled automatically.
+Two services come up: `app` (serves the SPA + `/api`) and `cobalt` (internal-only).
 
 ### Production environment variables
 
 ```bash
-# Required for production — used in download links returned to browsers.
-# Must be the API's public HTTPS URL (e.g., https://api.example.com).
-API_URL_PUBLIC=https://api.example.com
-
-# CORS — set to the web app's public URL in production.
+# Optional — restrict cross-origin API callers. The same-origin SPA needs none.
 ALLOWED_ORIGINS=https://snatch.example.com
+
+# Internal cobalt instance (docker-compose sets this automatically).
+COBALT_API_URL=http://cobalt:9000
 ```
 
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/extract` | Extract media metadata from a social URL |
-| GET | `/api/download?url=...` | Stream video download (pipe-through from yt-dlp) |
+| GET | `/api/download?url=...` | Resolve via cobalt and stream the media file |
 | GET | `/health` | Health check |
 
 ## Environment Variables
 
 | Variable | Service | Description | Default |
 |----------|---------|-------------|---------|
-| `API_URL` | Web | API URL for local dev (`bun dev`) | `http://localhost:3001` |
-| `API_URL_INTERNAL` | Web | SSR-to-API internal URL (container network) | `http://api:3001` |
-| `API_URL_PUBLIC` | Web | API public origin for browser download links | `http://localhost:38701` |
-| `ALLOWED_ORIGINS` | API | CORS origins (comma-separated) | `""` (reject all) |
-| `PORT` | Both | Server listen port | `3001` (API), `4321` (Web) |
-| `RATE_LIMIT_MAX` | API | Max requests per window | `10` |
-| `RATE_LIMIT_WINDOW` | API | Rate window (ms) | `60000` |
+| `APP_PORT` | app | Host port for the UI + API | `38700` |
+| `ALLOWED_ORIGINS` | app | Cross-origin API callers (comma-separated) | `""` (reject all) |
+| `PORT` | app | Container listen port | `3001` |
+| `API_RATE_LIMIT_MAX` | app | Max API requests per window | `30` |
+| `API_RATE_LIMIT_WINDOW` | app | Rate window (ms) | `60000` |
+| `COBALT_API_URL` | app | Internal self-hosted cobalt instance URL | `http://localhost:9000` |
+| `VITE_API_TARGET` | web (dev) | Vite dev proxy target for `/api` | `http://localhost:3001` |
 
 ## Architecture
 
 ```
-Browser → snatch-web (Astro SSR, port 4321)
-                │
-                │  POST /api/download
-                │  validate → rate limit → forward
-                ▼
-          snatch-api (Hono, port 3001)
-                │
-                │  POST /api/extract
-                │  validate → cache → retry → yt-dlp
-                ▼
-          yt-dlp (media extraction engine)
-
-Download flow (browser clicks download link):
-  Browser ──GET /api/download?url=...──▶ snatch-api ──yt-dlp pipe-through──▶ video.mp4
+Browser ─ GET / ────────────▶ snatch-app (Hono, serves the SPA static files)
+Browser ─ GET /api/download ─▶ snatch-app
+                                    │  validate → rate limit
+                                    │  resolve via cobalt → fetch → pipe bytes back
+                                    ▼
+                              cobalt (self-hosted, internal-only, port 9000)
+                                    │  tunnel / redirect
+                                    ▼
+                              source CDN / cobalt tunnel
 ```
 
 ## Tech Stack
 
 | Layer | Stack |
 |-------|-------|
-| Frontend | Astro 5, React 19, Tailwind CSS 4 |
+| Frontend | React 19, Vite, Tailwind CSS 4 |
 | API | Bun, Hono |
-| Extraction | yt-dlp |
+| Media engine | cobalt (self-hosted) |
 | Shared | TypeScript types, validation, constants |
 | Tooling | Bun workspaces, Biome, Husky |
 

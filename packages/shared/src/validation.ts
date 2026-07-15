@@ -2,10 +2,9 @@ import {
 	ALLOWED_PLATFORM_DOMAINS,
 	NON_RETRYABLE_PATTERNS,
 	PLATFORM_HOSTS,
-	URL_PATTERNS,
+	type SupportedPlatform,
 	WHITESPACE_ONLY_REGEX,
 } from "./constants";
-import type { SupportedPlatform, ValidationSchema } from "./types";
 
 function parseHttpUrl(url: string): URL | null {
 	try {
@@ -73,74 +72,6 @@ export function detectPlatform(url: string): SupportedPlatform | null {
 	const parsed = parseHttpUrl(url);
 	if (!parsed) return null;
 	return platformFromHost(parsed.hostname.toLowerCase());
-}
-
-/**
- * Extract content ID from platform URL
- */
-export function extractContentId(url: string, platform: SupportedPlatform): string | null {
-	try {
-		// Match against the normalized full URL (href), not just pathname.
-		const href = new URL(url).href;
-		const patterns = URL_PATTERNS[platform]?.patterns || [];
-
-		for (const pattern of patterns) {
-			const match = href.match(pattern);
-			if (match?.[1]) {
-				return match[1];
-			}
-		}
-
-		return null;
-	} catch {
-		return null;
-	}
-}
-
-/**
- * Full validation for frontend use
- */
-export function validate(url: string): ValidationSchema {
-	const errors: string[] = [];
-
-	if (!url || typeof url !== "string") {
-		errors.push("URL is required");
-		return { isValid: false, errors };
-	}
-
-	const trimmedUrl = url.trim();
-
-	try {
-		new URL(trimmedUrl);
-	} catch {
-		errors.push("Invalid URL format");
-		return { isValid: false, errors };
-	}
-
-	const urlObj = new URL(trimmedUrl);
-	if (!["http:", "https:"].includes(urlObj.protocol)) {
-		errors.push("URL must use HTTP or HTTPS protocol");
-	}
-
-	const platform = platformFromHost(urlObj.hostname.toLowerCase());
-	if (!platform) {
-		errors.push("Unsupported platform. Please use X or TikTok URL");
-		return { isValid: false, errors };
-	}
-
-	const platformConfig = URL_PATTERNS[platform];
-	const contentId = extractContentId(trimmedUrl, platform);
-	if (platformConfig.requiresContentId && !contentId) {
-		errors.push(`Could not extract content ID from ${platform} URL`);
-		return { isValid: false, errors, platform };
-	}
-
-	return {
-		isValid: errors.length === 0,
-		errors,
-		platform,
-		...(contentId ? { contentId } : {}),
-	};
 }
 
 /**
@@ -227,26 +158,4 @@ export function isRetryableError(error: string): boolean {
 		}
 	}
 	return true;
-}
-
-/**
- * Parse quality string to quality category.
- * Treats anything ≥720p as HD so 1920p/1280p classify correctly.
- */
-export function parseQuality(quality: string): "hd" | "sd" | "audio" {
-	const q = quality.toLowerCase();
-	if (q.includes("audio")) return "audio";
-	if (q === "best" || q === "hd") return "hd";
-	const match = q.match(/(\d+)\s*p/);
-	if (match && parseInt(match[1], 10) >= 720) return "hd";
-	return "sd";
-}
-
-/**
- * Format file size from bytes to human-readable string
- */
-export function formatFileSize(bytes: number): string {
-	if (bytes < 1024) return `${bytes} B`;
-	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-	return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

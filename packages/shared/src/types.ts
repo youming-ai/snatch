@@ -2,98 +2,40 @@
  * Core type definitions shared between API and web
  */
 
-export type SupportedPlatform = "twitter" | "tiktok";
-
-export interface VideoFormat {
-	format_id: string;
-	quality: string;
-	url: string;
-	ext: string;
-	filesize?: number;
-}
-
-export interface ExtractResponse {
-	success: boolean;
-	platform: string;
-	title: string;
-	thumbnail?: string;
-	formats: VideoFormat[];
-	error?: string;
-}
-
-/**
- * One quality variant of a single video. A video usually has 2–3 of these
- * (e.g. 1080p / 720p / 540p) and the UI renders them as a quality picker
- * inside ONE result card — not as separate cards.
- */
-export interface DownloadFormat {
-	formatId: string;
-	quality: string;
-	qualityCategory: "hd" | "sd" | "audio";
-	size?: string;
-	downloadUrl: string;
-}
-
-export interface DownloadResult {
-	id: string;
-	type: "video" | "image";
-	url: string;
-	thumbnail?: string;
-	title: string;
-	platform: SupportedPlatform;
-	formats: DownloadFormat[];
-	isMock?: boolean;
-	isFallback?: boolean;
-	metadata?: DownloadMetadata;
-}
-
-export interface DownloadMetadata {
-	author?: string;
-	description?: string;
-	duration?: number;
-	playCount?: number;
-	likeCount?: number;
-	commentCount?: number;
-	shareCount?: number;
-	createdAt?: string;
-	tags?: string[];
-}
-
-export interface DownloadResponse {
-	success: boolean;
-	results?: DownloadResult[];
-	error?: string;
-	platform?: SupportedPlatform;
-	processingTime?: number;
-}
-
-export interface DownloadRequest {
-	url: string;
-	platform?: SupportedPlatform;
-	quality?: "hd" | "sd" | "audio";
-}
-
-export interface PlatformConfig {
-	name: string;
-	domain: string;
-	color: string;
-	bgColor: string;
-	description: string;
-	supportedMedia: ("video" | "image")[];
-}
-
-export interface ValidationSchema {
-	isValid: boolean;
-	errors: string[];
-	platform?: SupportedPlatform;
-	contentId?: string;
-}
-
-export interface ExtractRequest {
-	url: string;
-}
-
 export interface ErrorResponse {
 	success: boolean;
 	error: string;
+}
+
+export interface CobaltOptions {
+	audioBitrate?: "320" | "256" | "128" | "96" | "64" | "8";
+	audioFormat?: "best" | "mp3" | "ogg" | "wav" | "opus";
+	downloadMode?: "auto" | "audio" | "mute";
+	filenameStyle?: "classic" | "pretty" | "basic" | "nerdy";
+	videoQuality?: "max" | "4320" | "2160" | "1440" | "1080" | "720" | "480" | "360" | "240" | "144";
+	disableMetadata?: boolean;
+	alwaysProxy?: boolean;
+	localProcessing?: "disabled" | "preferred" | "forced";
+	subtitleLang?: string;
+	youtubeVideoCodec?: "h264" | "av1" | "vp9";
+	youtubeVideoContainer?: "auto" | "mp4" | "webm" | "mkv";
+	youtubeDubLang?: string;
+	convertGif?: boolean;
+	allowH265?: boolean;
+	tiktokFullAudio?: boolean;
+	youtubeBetterAudio?: boolean;
+	youtubeHLS?: boolean;
+}
+
+export interface CobaltResponse {
+	status: "tunnel" | "redirect" | "picker" | "local-processing" | "error";
+	url?: string;
+	filename?: string;
+	picker?: { type: "photo" | "video" | "gif"; url: string; thumb?: string }[];
+	audio?: string;
+	audioFilename?: string;
+	tunnels?: string[];
+	type?: string;
+	service?: string;
+	error?: { code?: string; context?: { service?: string; limit?: number } };
 }

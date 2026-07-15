@@ -1,23 +1,30 @@
 services:
-  api:
+  # The whole app: Hono API that serves the built React SPA AND resolves media
+  # via the internal cobalt service. Single public origin — no separate web tier.
+  app:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
-    container_name: snatch-api
+    container_name: snatch-app
     ports:
-      - "${API_PORT:-38701}:3001"
+      - "${APP_PORT:-38700}:3001"
     environment:
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - PORT=3001
-      - RATE_LIMIT_MAX=${RATE_LIMIT_MAX:-10}
-      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60000}
+      # Optional: restrict cross-origin API callers. Same-origin SPA needs none.
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - API_RATE_LIMIT_MAX=${API_RATE_LIMIT_MAX:-30}
+      - API_RATE_LIMIT_WINDOW=${API_RATE_LIMIT_WINDOW:-60000}
+      # Internal cobalt instance used for the actual file resolution/streaming.
+      - COBALT_API_URL=${COBALT_API_URL:-http://cobalt:9000}
+      # Signing key to secure media proxy links (keeps links stable on restart)
+      - PROXY_SIGNING_KEY=${PROXY_SIGNING_KEY:-}
+    depends_on:
+      - cobalt
     restart: unless-stopped
-    volumes:
-      - ./data:/app/data
     networks:
       - snatch
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      test: ["CMD-SHELL", "bun -e 'fetch(\"http://localhost:3001/health\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -31,42 +38,27 @@ services:
           cpus: '0.25'
           memory: 128M
 
-  web:
-    build:
-      context: .
-      dockerfile: packages/web/Dockerfile
-    container_name: snatch-web
-    ports:
-      - "${WEB_PORT:-38700}:4321"
-    environment:
-      # Internal URL for SSR → API (container network). The web SSR layer
-      # proxies the download stream, so the API never needs public exposure.
-      - API_URL_INTERNAL=${API_URL_INTERNAL:-http://api:3001}
-      - HOST=0.0.0.0
-      - PORT=4321
-      - NODE_ENV=production
-      - PUBLIC_RATE_LIMIT_MAX=${PUBLIC_RATE_LIMIT_MAX:-10}
-      - PUBLIC_RATE_LIMIT_WINDOW=${PUBLIC_RATE_LIMIT_WINDOW:-60000}
-    depends_on:
-      api:
-        condition: service_healthy
+  # Self-hosted cobalt instance — resolves + muxes the actual media file.
+  # Internal-only (no published port); the app proxies its output so the
+  # browser only ever talks to the app origin. Image is unmodified upstream
+  # (AGPL-3.0): https://github.com/imputnet/cobalt
+  cobalt:
+    image: ghcr.io/imputnet/cobalt:11
+    container_name: snatch-cobalt
+    init: true
+    read_only: true
     restart: unless-stopped
+    environment:
+      # Must match how other containers reach cobalt, or tunnels break.
+      - API_URL=http://cobalt:9000/
+      # TikTok / X (and other auth-gated services) bot-block cobalt without
+      # cookies. To fetch them, drop a cookies.json next to this file and
+      # uncomment the next line + the volumes block below.
+      # - COOKIE_PATH=/cookies.json
+    # volumes:
+    #   - ./cookies.json:/cookies.json:ro
     networks:
       - snatch
-    healthcheck:
-      test: ["CMD-SHELL", "bun -e 'fetch(\"http://localhost:4321/\").then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))'"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 15s
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
 
 networks:
   snatch:
