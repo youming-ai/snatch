@@ -1,56 +1,44 @@
-import type { PlatformConfig, SupportedPlatform } from "./types";
+/**
+ * Every service the media engine (cobalt) can fetch, its display label, and
+ * the host(s) whose URLs we accept. cobalt does the real extraction — snatch
+ * only gates on a known host, so this list is the single source of truth for
+ * both URL validation and the UI's "supported services" grid.
+ */
+export const SERVICES = [
+	{ id: "bilibili", label: "bilibili", hosts: ["bilibili.com", "b23.tv"] },
+	{ id: "bluesky", label: "Bluesky", hosts: ["bsky.app"] },
+	{ id: "dailymotion", label: "Dailymotion", hosts: ["dailymotion.com", "dai.ly"] },
+	{ id: "facebook", label: "Facebook", hosts: ["facebook.com", "fb.watch"] },
+	{ id: "instagram", label: "Instagram", hosts: ["instagram.com"] },
+	{ id: "loom", label: "Loom", hosts: ["loom.com"] },
+	{ id: "ok", label: "OK.ru", hosts: ["ok.ru"] },
+	{ id: "pinterest", label: "Pinterest", hosts: ["pinterest.com", "pin.it"] },
+	{ id: "newgrounds", label: "Newgrounds", hosts: ["newgrounds.com"] },
+	{ id: "reddit", label: "Reddit", hosts: ["reddit.com", "redd.it"] },
+	{ id: "rutube", label: "Rutube", hosts: ["rutube.ru"] },
+	{ id: "snapchat", label: "Snapchat", hosts: ["snapchat.com"] },
+	{ id: "soundcloud", label: "SoundCloud", hosts: ["soundcloud.com"] },
+	{ id: "streamable", label: "Streamable", hosts: ["streamable.com"] },
+	{ id: "tiktok", label: "TikTok", hosts: ["tiktok.com"] },
+	{ id: "tumblr", label: "Tumblr", hosts: ["tumblr.com"] },
+	{ id: "twitch", label: "Twitch Clips", hosts: ["twitch.tv", "clips.twitch.tv"] },
+	{ id: "twitter", label: "X / Twitter", hosts: ["x.com", "twitter.com"] },
+	{ id: "vimeo", label: "Vimeo", hosts: ["vimeo.com"] },
+	{ id: "vk", label: "VK", hosts: ["vk.com", "vkvideo.ru"] },
+	{ id: "youtube", label: "YouTube", hosts: ["youtube.com", "youtu.be"] },
+] as const;
 
-export const SUPPORTED_PLATFORMS = {
-	TWITTER: "twitter",
-	TIKTOK: "tiktok",
-} as const;
+export type SupportedPlatform = (typeof SERVICES)[number]["id"];
 
-export const PLATFORM_HOSTS: Record<SupportedPlatform, string[]> = {
-	[SUPPORTED_PLATFORMS.TWITTER]: ["x.com", "twitter.com"],
-	[SUPPORTED_PLATFORMS.TIKTOK]: ["tiktok.com"],
-};
+export const PLATFORM_HOSTS = Object.fromEntries(
+	SERVICES.map((s) => [s.id, [...s.hosts]] as const),
+) as unknown as Record<SupportedPlatform, string[]>;
 
-export const PLATFORM_CONFIGS: Record<SupportedPlatform, PlatformConfig> = {
-	[SUPPORTED_PLATFORMS.TWITTER]: {
-		domain: "x.com",
-		name: "X",
-		color: "text-blue-400",
-		bgColor: "bg-blue-400/10",
-		description: "Videos, GIFs",
-		supportedMedia: ["video"],
-	},
-	[SUPPORTED_PLATFORMS.TIKTOK]: {
-		domain: "tiktok.com",
-		name: "TikTok",
-		color: "text-black dark:text-white",
-		bgColor: "bg-gray-500/10",
-		description: "No Watermark Videos",
-		supportedMedia: ["video"],
-	},
-};
+export const ALLOWED_PLATFORM_DOMAINS = SERVICES.flatMap((s) => [...s.hosts]);
 
-export const PLATFORM_DOMAINS = Object.values(PLATFORM_HOSTS).flat();
-
-export const URL_PATTERNS = {
-	twitter: {
-		patterns: [/\/status\/(\d+)/i],
-		requiresContentId: true,
-	},
-	tiktok: {
-		patterns: [/\/video\/(\d+)/i, /\/@[^/]+\/video\/(\d+)/i],
-		requiresContentId: false,
-	},
-} as const;
-
-export const ALLOWED_PLATFORM_DOMAINS = PLATFORM_DOMAINS;
-
-// Real share URLs never contain whitespace. We spawn yt-dlp via argv (no
-// shell), so shell metacharacters like `&;|$\`` cannot inject commands and
-// don't need to be filtered here — `new URL()` parsing + the platform domain
-// whitelist do the actual security work.
+// Real share URLs never contain whitespace. `new URL()` parsing + the host
+// allowlist do the actual security work; this just rejects malformed input.
 export const WHITESPACE_ONLY_REGEX = /\s/;
-
-export const DANGEROUS_PROTOCOLS = ["javascript:", "data:", "vbscript:", "file:", "ftp:"] as const;
 
 export const NON_RETRYABLE_PATTERNS = [
 	"invalid url",

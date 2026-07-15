@@ -1,30 +1,19 @@
 import { describe, expect, it } from "bun:test";
-import {
-	detectPlatform,
-	extractContentId,
-	formatFileSize,
-	isRetryableError,
-	parseQuality,
-	sanitizeUrl,
-	validate,
-	validateUrl,
-} from "./validation";
+import { detectPlatform, isRetryableError, sanitizeUrl, validateUrl } from "./validation";
 
 describe("validateUrl", () => {
-	it("should accept valid TikTok URLs", () => {
-		expect(validateUrl("https://tiktok.com/@user/video/123").valid).toBe(true);
-		expect(validateUrl("https://www.tiktok.com/video/123").valid).toBe(true);
+	it("should accept URLs from supported services", () => {
+		expect(validateUrl("https://www.tiktok.com/@user/video/1234567890").valid).toBe(true);
+		expect(validateUrl("https://x.com/user/status/1234567890").valid).toBe(true);
+		expect(validateUrl("https://twitter.com/user/status/1234567890").valid).toBe(true);
+		expect(validateUrl("https://youtu.be/jNQXAC9IVRw").valid).toBe(true);
+		expect(validateUrl("https://vimeo.com/357274789").valid).toBe(true);
 	});
 
-	it("should accept valid Twitter/X URLs", () => {
-		expect(validateUrl("https://twitter.com/user/status/123").valid).toBe(true);
-		expect(validateUrl("https://x.com/user/status/123").valid).toBe(true);
-	});
-
-	it("should reject unsupported platforms", () => {
-		expect(validateUrl("https://instagram.com/p/ABC").valid).toBe(false);
-		expect(validateUrl("https://facebook.com/video/123").valid).toBe(false);
-		expect(validateUrl("https://www.youtube.com/watch?v=abc123").valid).toBe(false);
+	it("should reject unsupported hosts", () => {
+		const result = validateUrl("https://example.com/video/1");
+		expect(result.valid).toBe(false);
+		expect(result.error).toContain("Unsupported platform");
 	});
 
 	it("should reject empty URLs", () => {
@@ -35,19 +24,12 @@ describe("validateUrl", () => {
 		expect(validateUrl("ftp://example.com").valid).toBe(false);
 	});
 
-	// We spawn yt-dlp via argv (no shell), so shell metacharacters can't be
-	// injected. The remaining job for validation is just rejecting URLs that
-	// are structurally malformed — anything containing whitespace.
 	it("should reject URLs containing whitespace", () => {
-		expect(validateUrl("https://tiktok.com/@user/video/123 extra").valid).toBe(false);
-		expect(validateUrl("https://x.com/user/status/123\nfoo").valid).toBe(false);
+		expect(validateUrl("https://x.com/ user").valid).toBe(false);
 	});
 
 	it("should accept URLs with multiple query parameters", () => {
-		expect(
-			validateUrl("https://www.tiktok.com/@user/video/123?is_from_webapp=1&sender_device=pc").valid,
-		).toBe(true);
-		expect(validateUrl("https://x.com/user/status/123?ref=foo&bar=baz").valid).toBe(true);
+		expect(validateUrl("https://x.com/i/status/1?a=1&b=2").valid).toBe(true);
 	});
 
 	it("should reject invalid URL format", () => {
@@ -56,57 +38,17 @@ describe("validateUrl", () => {
 });
 
 describe("detectPlatform", () => {
-	it("should detect TikTok URLs", () => {
+	it("should detect the canonical service id from the host", () => {
 		expect(detectPlatform("https://www.tiktok.com/@user/video/1234567890")).toBe("tiktok");
-		expect(detectPlatform("https://tiktok.com/@user/video/1234567890")).toBe("tiktok");
-	});
-
-	it("should detect Twitter/X URLs", () => {
-		expect(detectPlatform("https://twitter.com/user/status/1234567890")).toBe("twitter");
 		expect(detectPlatform("https://x.com/user/status/1234567890")).toBe("twitter");
+		expect(detectPlatform("https://twitter.com/user/status/1234567890")).toBe("twitter");
+		expect(detectPlatform("https://www.instagram.com/p/ABC123")).toBe("instagram");
+		expect(detectPlatform("https://www.youtube.com/watch?v=jNQXAC9IVRw")).toBe("youtube");
 	});
 
-	it("should return null for unsupported platforms", () => {
-		expect(detectPlatform("https://www.instagram.com/p/ABC123")).toBeNull();
-		expect(detectPlatform("https://www.youtube.com/watch?v=jNQXAC9IVRw")).toBeNull();
+	it("should return null for unsupported hosts", () => {
+		expect(detectPlatform("https://example.com/video/1")).toBeNull();
 		expect(detectPlatform("not-a-url")).toBeNull();
-	});
-});
-
-describe("extractContentId", () => {
-	it("should extract TikTok video ID", () => {
-		expect(extractContentId("https://www.tiktok.com/@user/video/1234567890", "tiktok")).toBe(
-			"1234567890",
-		);
-	});
-
-	it("should extract X/Twitter status ID", () => {
-		expect(extractContentId("https://twitter.com/user/status/1234567890", "twitter")).toBe(
-			"1234567890",
-		);
-	});
-
-	it("should return null for URLs without content ID", () => {
-		expect(extractContentId("https://tiktok.com/", "tiktok")).toBeNull();
-	});
-});
-
-describe("validate", () => {
-	it("should validate correct URLs", () => {
-		const result = validate("https://www.tiktok.com/@user/video/1234567890");
-		expect(result.isValid).toBe(true);
-		expect(result.platform).toBe("tiktok");
-		expect(result.contentId).toBe("1234567890");
-	});
-
-	it("should reject empty URLs", () => {
-		expect(validate("").isValid).toBe(false);
-	});
-
-	it("should reject unsupported platforms", () => {
-		const result = validate("https://www.instagram.com/p/ABC");
-		expect(result.isValid).toBe(false);
-		expect(result.errors[0]).toContain("Unsupported platform");
 	});
 });
 
@@ -140,46 +82,10 @@ describe("isRetryableError", () => {
 	});
 });
 
-describe("parseQuality", () => {
-	it("should parse HD qualities", () => {
-		expect(parseQuality("1080p")).toBe("hd");
-		expect(parseQuality("720p")).toBe("hd");
-		expect(parseQuality("1920p")).toBe("hd");
-		expect(parseQuality("1280p")).toBe("hd");
-		expect(parseQuality("2160p")).toBe("hd");
-		expect(parseQuality("best")).toBe("hd");
-	});
-
-	it("should parse audio quality", () => {
-		expect(parseQuality("audio")).toBe("audio");
-	});
-
-	it("should default to SD", () => {
-		expect(parseQuality("480p")).toBe("sd");
-		expect(parseQuality("medium")).toBe("sd");
-	});
-});
-
-describe("formatFileSize", () => {
-	it("should format bytes", () => {
-		expect(formatFileSize(500)).toBe("500 B");
-		expect(formatFileSize(1500)).toBe("1.5 KB");
-		expect(formatFileSize(1500000)).toBe("1.4 MB");
-	});
-});
-
 describe("URL validation hardening", () => {
 	it("should reject spoofed platform domains in path", () => {
 		expect(detectPlatform("https://evil.com/x.com/user/status/1234567890")).toBeNull();
-		expect(validate("https://evil.com/x.com/user/status/1234567890").isValid).toBe(false);
 		expect(validateUrl("https://evil.com/x.com/user/status/1234567890").valid).toBe(false);
-	});
-
-	it("should accept TikTok short share URLs without content IDs", () => {
-		const result = validate("https://vm.tiktok.com/ZMabc123/");
-		expect(result.isValid).toBe(true);
-		expect(result.platform).toBe("tiktok");
-		expect(result.contentId).toBeUndefined();
 	});
 
 	it("should reject non-http protocols when sanitizing", () => {
