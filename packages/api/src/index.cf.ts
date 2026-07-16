@@ -1,3 +1,4 @@
+import type { Context } from "hono";
 import app from "./app";
 
 interface EnvWithAssets {
@@ -6,7 +7,7 @@ interface EnvWithAssets {
 	};
 }
 
-app.all("*", async (c) => {
+app.all("*", async (c: Context) => {
 	const env = c.env as EnvWithAssets | undefined;
 	if (env?.ASSETS && typeof env.ASSETS.fetch === "function") {
 		return await env.ASSETS.fetch(c.req.raw);

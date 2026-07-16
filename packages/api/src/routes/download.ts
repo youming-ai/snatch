@@ -1,5 +1,6 @@
 import { type CobaltOptions, type CobaltResponse, validateUrl } from "@snatch/shared";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
+import { env } from "hono/adapter";
 import { stream } from "hono/streaming";
 import { getCobaltInfo, resolveViaCobalt } from "../lib/cobalt";
 import { isSafeUrl, sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
@@ -10,17 +11,17 @@ const downloadRouter = new Hono();
  * Helper to rewrite raw cobalt URLs to point to our proxy endpoints,
  * keeping the cobalt instance internal-only.
  */
-function rewriteCobaltUrls(data: CobaltResponse, origin: string): CobaltResponse {
+function rewriteCobaltUrls(data: CobaltResponse, origin: string, c: Context): CobaltResponse {
 	const result = { ...data };
 
 	if (result.status === "tunnel" || result.status === "redirect") {
 		if (result.url) {
-			const sig = signUrl(result.url);
+			const sig = signUrl(result.url, c);
 			result.url = `${origin}/api/proxy?url=${encodeURIComponent(result.url)}&sig=${sig}&filename=${encodeURIComponent(result.filename || "file")}`;
 		}
 	} else if (result.status === "picker" && result.picker) {
 		result.picker = result.picker.map((item) => {
-			const sig = signUrl(item.url);
+			const sig = signUrl(item.url, c);
 			return {
 				...item,
 				url: `${origin}/api/proxy?url=${encodeURIComponent(item.url)}&sig=${sig}&filename=${encodeURIComponent(result.filename || "file")}`,
@@ -79,14 +80,15 @@ downloadRouter.post("/api/resolve", async (c) => {
 	if (turnstileHeader) authHeaders["cf-turnstile-response"] = turnstileHeader;
 
 	try {
-		const rawResponse = await resolveViaCobalt(url, options, authHeaders);
+		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
+		const rawResponse = await resolveViaCobalt(url, options, authHeaders, cobaltUrl);
 
 		if (rawResponse.status === "error") {
 			return c.json(rawResponse);
 		}
 
 		const origin = new URL(c.req.url).origin;
-		const rewritten = rewriteCobaltUrls(rawResponse, origin);
+		const rewritten = rewriteCobaltUrls(rawResponse, origin, c);
 		return c.json(rewritten);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Resolution failed";
@@ -107,11 +109,11 @@ downloadRouter.get("/api/proxy", async (c) => {
 		return c.json({ success: false, error: "Missing required parameters" }, 400);
 	}
 
-	if (!verifyUrl(targetUrl, signature)) {
+	if (!verifyUrl(targetUrl, signature, c)) {
 		return c.json({ success: false, error: "Invalid signature" }, 403);
 	}
 
-	const cobaltUrl = process.env.COBALT_API_URL || "http://localhost:9000";
+	const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
 	if (!isSafeUrl(targetUrl, cobaltUrl)) {
 		return c.json({ success: false, error: "Forbidden target URL" }, 403);
 	}
@@ -156,18 +158,13 @@ downloadRouter.get("/api/proxy", async (c) => {
 });
 
 /**
- * GET /api/local-process
- * Perform server-side FFmpeg merging/muxing on cobalt segments.
- */
-
-
-/**
  * GET /api/info
  * Query capabilities of the cobalt backend instance.
  */
 downloadRouter.get("/api/info", async (c) => {
 	try {
-		const info = await getCobaltInfo();
+		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
+		const info = await getCobaltInfo(cobaltUrl);
 		return c.json(info);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Failed to query cobalt instance";
@@ -190,13 +187,14 @@ downloadRouter.get("/api/download", async (c) => {
 	}
 
 	try {
-		const rawResponse = await resolveViaCobalt(url, { videoQuality: "max" });
+		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
+		const rawResponse = await resolveViaCobalt(url, { videoQuality: "max" }, undefined, cobaltUrl);
 		if (rawResponse.status === "error") {
 			throw new Error(`cobalt error: ${rawResponse.error?.code}`);
 		}
 
 		const origin = new URL(c.req.url).origin;
-		const rewritten = rewriteCobaltUrls(rawResponse, origin);
+		const rewritten = rewriteCobaltUrls(rawResponse, origin, c);
 
 		if (rewritten.status === "tunnel" && rewritten.url) {
 			return c.redirect(rewritten.url);
