@@ -38,7 +38,7 @@ Browser ─ GET /api/download  → API: validateUrl → rateLimit → resolveVia
 - `packages/web/src/components/DownloaderApp.tsx` — owns `url`/`loading`/`error`/`savedName` state; fetches `/api/download`, creates a blob URL, triggers a synthetic `<a download>` click. On success, shows a green confirmation card.
 - `packages/web/vite.config.ts` — `react()` + `tailwindcss()` plugins; dev proxy `/api` → `VITE_API_TARGET || http://localhost:3001`; `build.outDir: "dist"`.
 - `packages/api/Dockerfile` — multi-stage (`oven/bun:1.3.11` builder → `oven/bun:1.3.11-slim` runtime); copies `api/dist/index.js` and `web/dist/` into `/app/public`; exposes `3001`.
-- `docker-compose.yml` — `app` + `cobalt` services on the `snatch` bridge network; cobalt has no published port. `cobalt:11` image from `ghcr.io/imputnet/cobalt`.
+- `docker-compose.yml` — **cobalt-only** backend for the Cloudflare Workers deployment (frontend + API run on the Worker, see `packages/api/wrangler.json`). cobalt joins the external `dokploy-network` so Dokploy's Traefik routes its public host. `cobalt:11` from `ghcr.io/imputnet/cobalt`; `API_URL` MUST be the public URL (`COBALT_PUBLIC_URL`) or tunnels break.
 
 ## Development Commands
 
@@ -113,10 +113,11 @@ bun docker:down    # docker compose down
 | `ALLOWED_ORIGINS` | API | `""` (reject all) | Comma-separated CORS allowlist for `/api/*`. Same-origin SPA needs none. |
 | `API_RATE_LIMIT_MAX` | API | `30` | Max requests per window |
 | `API_RATE_LIMIT_WINDOW` | API | `60000` (ms) | Rate window |
-| `COBALT_API_URL` | API | `http://localhost:9000` | Internal cobalt instance. Inside docker-compose: `http://cobalt:9000`. |
+| `COBALT_API_URL` | API/Worker | `http://localhost:9000` | cobalt base URL the API calls. On the Worker: the public cobalt host (e.g. `https://cobalt.um1ng.me`). |
 | `STATIC_ROOT` | API | `./public` | Override the SPA static dir |
 | `VITE_API_TARGET` | web (dev) | `http://localhost:3001` | Vite dev proxy target for `/api` |
 | `PROXY_SIGNING_KEY` | API | `""` (random) | HMAC key to sign media proxy links to prevent SSRF. If empty, a random key is generated at startup. |
+| `COBALT_PUBLIC_URL` | cobalt (compose) | `https://cobalt.um1ng.me/` | Public URL cobalt is reached at; sets cobalt's `API_URL` so tunnel links resolve. |
 
 ## Pre-Commit / Pre-Push Hooks (Husky)
 
