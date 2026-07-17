@@ -1,4 +1,9 @@
-import { type CobaltOptions, type CobaltResponse, validateUrl } from "@snatch/shared";
+import {
+	type CobaltOptions,
+	type CobaltResponse,
+	sanitizeCobaltOptions,
+	validateUrl,
+} from "@snatch/shared";
 import { type Context, Hono } from "hono";
 import { env } from "hono/adapter";
 import { stream } from "hono/streaming";
@@ -81,7 +86,13 @@ downloadRouter.post("/api/resolve", async (c) => {
 
 	try {
 		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
-		const rawResponse = await resolveViaCobalt(url, options, authHeaders, cobaltUrl);
+		const cleanOptions = sanitizeCobaltOptions(options);
+		const rawResponse = await resolveViaCobalt(
+			url,
+			cleanOptions as CobaltOptions,
+			authHeaders,
+			cobaltUrl,
+		);
 
 		if (rawResponse.status === "error") {
 			return c.json(rawResponse);

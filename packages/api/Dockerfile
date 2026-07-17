@@ -6,7 +6,7 @@
 # =============================================================================
 # Pinned to match the Bun version used to generate bun.lock.
 # Bump this tag alongside any local `bun upgrade` + lockfile regeneration.
-FROM oven/bun:1.3.11 AS builder
+FROM oven/bun:1.3.14 AS builder
 WORKDIR /app
 
 # All workspace package.json files must be present for `bun install --frozen-lockfile`.
@@ -36,7 +36,7 @@ RUN bun run build
 #          shells out to ffmpeg for local-processing remuxing, so both
 #          CA certificates and ffmpeg are needed.
 # =============================================================================
-FROM oven/bun:1.3.11-slim AS runtime
+FROM oven/bun:1.3.14-slim AS runtime
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates ffmpeg \
