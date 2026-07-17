@@ -1,32 +1,35 @@
 {
-  "name": "snatch",
-  "private": true,
-  "workspaces": [
-    "packages/*"
-  ],
-  "scripts": {
-    "dev": "bun --filter '@snatch/web' dev",
-    "dev:api": "bun --filter '@snatch/api' dev",
-    "build": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build && bun --filter '@snatch/web' build",
-    "build:api": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build",
-    "build:web": "bun --filter '@snatch/web' build",
-    "preview": "bun --filter '@snatch/web' preview",
-    "test": "bun --filter '*' test",
-    "test:shared": "bun --filter '@snatch/shared' test",
-    "test:api": "bun --filter '@snatch/api' test",
-    "test:web": "bun --filter '@snatch/web' test",
-    "typecheck": "bun --filter '*' typecheck",
-    "lint": "biome check .",
-    "lint:fix": "biome check --fix .",
-    "format": "biome format --write .",
-    "check": "biome check --fix .",
-    "docker:up": "docker compose up -d --build",
-    "docker:down": "docker compose down",
-    "prepare": "husky"
-  },
-  "devDependencies": {
-    "@biomejs/biome": "^2.5.3",
-    "husky": "^9.1.7",
-    "@types/bun": "latest"
-  }
+	"name": "snatch",
+	"private": true,
+	"packageManager": "bun@1.3.14",
+	"workspaces": [
+		"packages/*"
+	],
+	"scripts": {
+		"dev": "bun --filter '@snatch/web' dev",
+		"dev:api": "bun --filter '@snatch/api' dev",
+		"build": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build && bun --filter '@snatch/web' build",
+		"build:api": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build",
+		"build:web": "bun --filter '@snatch/web' build",
+		"deploy:cf": "cd packages/api && wrangler deploy",
+		"preview": "bun --filter '@snatch/web' preview",
+		"test": "bun --filter '*' test",
+		"test:shared": "bun --filter '@snatch/shared' test",
+		"test:api": "bun --filter '@snatch/api' test",
+		"test:web": "bun --filter '@snatch/web' test",
+		"typecheck": "bun --filter '*' typecheck",
+		"lint": "biome check .",
+		"lint:fix": "biome check --fix .",
+		"format": "biome format --write .",
+		"check": "biome check --fix .",
+		"docker:up": "docker compose up -d --build",
+		"docker:down": "docker compose down",
+		"prepare": "husky"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.5.3",
+		"husky": "^9.1.7",
+		"@types/bun": "latest",
+		"wrangler": "^4.11.0"
+	}
 }
