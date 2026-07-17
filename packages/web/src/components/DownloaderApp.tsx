@@ -1,4 +1,4 @@
-import { detectPlatform, SERVICES } from "@snatch/shared";
+import { detectPlatform, SERVICES, sanitizeCobaltOptions } from "@snatch/shared";
 import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { DownloaderInput } from "./DownloaderInput";
@@ -119,7 +119,8 @@ function DownloaderAppInner() {
 		setSavedName(null);
 		setPickerResponse(null);
 
-		const { apiKey, ...cobaltOptions } = settings;
+		const { apiKey, ...rawCobaltOptions } = settings;
+		const cobaltOptions = sanitizeCobaltOptions(rawCobaltOptions);
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
