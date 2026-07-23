@@ -34,32 +34,6 @@ export function verifyUrl(targetUrl: string, signature: string, c: Context): boo
 	}
 }
 
-export function isSafeUrl(targetUrl: string, cobaltUrl: string): boolean {
-	try {
-		const parsed = new URL(targetUrl);
-		const allowedParsed = new URL(cobaltUrl);
-		if (parsed.host === allowedParsed.host) {
-			return true;
-		}
-		const hostname = parsed.hostname.toLowerCase();
-		if (
-			hostname === "localhost" ||
-			hostname === "127.0.0.1" ||
-			hostname === "::1" ||
-			hostname.startsWith("169.254")
-		) {
-			return false;
-		}
-		const ipv4Pattern = /^(?:10\.|172\.(?:1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/;
-		if (ipv4Pattern.test(hostname)) {
-			return false;
-		}
-		return true;
-	} catch {
-		return false;
-	}
-}
-
 export function sanitizeFilename(name: string): string {
 	return name.replace(/["\r\n]/g, "").slice(0, 200) || "file";
 }
