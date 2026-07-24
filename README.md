@@ -1,6 +1,6 @@
 # Snatch
 
-Social media video downloader — Bun monorepo: a React + Vite SPA served by a Hono API powered by a native `yt-dlp` engine.
+Social media video downloader — Bun monorepo: a React + TanStack Start SPA served by a Hono API powered by a native `yt-dlp` engine.
 
 ## Supported Platforms
 
@@ -21,11 +21,11 @@ snatch/
 │   │   │   ├── routes/     # /health, /api/resolve, /api/download
 │   │   │   └── lib/        # ytdlp, security
 │   │   └── test/
-│   ├── web/                # React 19 + Vite SPA (static)
-│   │   ├── index.html      # Vite entry
+│   ├── web/                # React 19 + TanStack Start SPA (static client)
 │   │   ├── src/
+│   │   │   ├── routes/     # __root document shell and file-based routes
 │   │   │   ├── components/ # DownloaderApp, DownloaderInput, ErrorBoundary
-│   │   │   ├── main.tsx    # React root
+│   │   │   ├── router.tsx  # TanStack Router factory
 │   │   │   └── styles.css
 │   │   └── public/         # favicon, logos, manifest, robots.txt
 │   └── shared/             # Types, validation, constants (zero deps)
@@ -83,14 +83,43 @@ bun run lint             # lint only
 bun run format           # format only
 ```
 
-## Docker
+## Deployment
+
+Two supported topologies.
+
+### All-in-one (Docker / Dokploy) — recommended
+
+The API serves the built SPA and `/api/*` on one origin. This is the only tier
+that runs the yt-dlp engine (it needs `child_process` + a filesystem, so it
+cannot run on Cloudflare Workers/Pages).
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
-
 # App (UI + API) -> http://localhost:38700
 ```
+
+On Dokploy: point the app's domain at the `app` service (port `3001`).
+
+### Split origin (Cloudflare Worker frontend + Dokploy API)
+
+Host the static SPA on a Cloudflare Worker (Workers Static Assets) and keep the
+API on Dokploy. The yt-dlp engine cannot run on Workers, so the Worker serves
+only the built client; all `/api/*` calls go to the Dokploy origin.
+
+1. **API (Dokploy)** — deploy the Docker image as above and set
+   `ALLOWED_ORIGINS` to the Worker origin (e.g. `https://snatch.<account>.workers.dev`)
+   so the browser may call `/api/resolve` cross-origin.
+2. **Frontend (Cloudflare Worker)** — `wrangler.jsonc` (repo root) configures an
+   assets-only Worker serving `packages/web/dist/client` with SPA fallback. In the
+   Cloudflare Worker build settings:
+   - Build command: `bun run build:cf`
+   - Deploy command: `bun run deploy:cf` (runs `wrangler deploy`)
+   - Build env `VITE_API_BASE_URL` = the public API origin (e.g. `https://api.snatch.example`)
+   - The deploy token needs **Account → Workers Scripts → Edit** (plus `CLOUDFLARE_ACCOUNT_ID`)
+
+Downloads stream directly from the API origin via `Content-Disposition`, so
+only `/api/resolve` needs CORS.
 
 ## API Endpoints
 

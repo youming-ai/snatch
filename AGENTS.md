@@ -1,92 +1,153 @@
 # Repository Guidelines
 
-Bun monorepo (3 workspace packages): React 19 + Vite SPA served as static files by a Hono API that resolves and processes media using a built-in `yt-dlp` engine. Single public origin.
+Bun monorepo (3 workspace packages) that resolves and downloads media from social platforms. A React 19 + TanStack Start SPA (no SSR) talks to a Hono API that wraps a self-provisioning `yt-dlp` binary as its extraction engine. Ships two ways: **all-in-one** (API serves the built SPA on one origin — the Docker image) or **split** (SPA on a Cloudflare Worker, API on Dokploy).
+
+## Project Overview
+
+- Paste a URL → API probes it with `yt-dlp` → returns signed per-format download choices → browser downloads directly from the API via a plain `<a download>`.
+- Supported platforms: X/Twitter, TikTok, Instagram (video). YouTube is intentionally removed. Host allowlist is data-driven from `SERVICES` in `packages/shared/src/constants.ts`.
+- The engine needs `child_process` + a writable filesystem, so it **cannot run on Cloudflare Workers/Pages** — only the static SPA can be hosted there (why the split topology exists; the Worker serves assets only).
 
 ## Package Boundaries
 
-|Package|Role|Entrypoint|Notable deps|
+| Package | Role | Entrypoint | Runtime deps |
 |---|---|---|---|
-|`packages/shared`|Types, validation, host allowlist|`src/index.ts`|**zero** — no `bun`, no framework; no `hono`|
-|`packages/api`|Hono server, yt-dlp engine, routes, middleware|`src/index.ts` (Bun entry)|`hono`, `@snatch/shared`|
-|`packages/web`|React SPA (no SSR)|`index.html` → `src/main.tsx`|`react`, `react-dom`, `lucide-react`, Tailwind v4, Vite|
+| `packages/shared` | Types, constants, URL validation, host allowlist | `src/index.ts` | **zero** — no framework, no `zod` |
+| `packages/api` | Hono server, yt-dlp engine, routes, middleware, URL signing | `src/index.ts` (Bun entry) | `hono`, `hono-pino`, `pino`, `zod`, `@sentry/bun`, `@snatch/shared` |
+| `packages/web` | TanStack Start SPA (`ssr: false`) | `src/routes/__root.tsx` → `routes/index.tsx` | React 19, `@tanstack/react-{start,router,form}`, `@sentry/react`, `lucide-react`, `zod`, Tailwind v4 |
 
-Cross-package import rule: every consumer imports from the `@snatch/shared` **barrel** (`import { ... } from "@snatch/shared"`).
+Import graph is strictly one-directional: `shared → {api, web}`; api and web never import each other. Consumers import the **barrel** (`import { … } from "@snatch/shared"`), never a subpath. `packages/shared/package.json` has no `dependencies` key — keep it that way.
 
 ## Architecture & Data Flow
 
 ```
-Browser ─ GET /              → API serves built SPA from ./public
-Browser ─ POST /api/resolve  → API: validateUrl → rateLimit → probe via yt-dlp → return formats
-Browser ─ GET /api/download → API: verifyUrl → executeDownload via yt-dlp → stream bytes
+All-in-one:  GET /             → Hono serves built SPA from ./public (serveStatic)
+Split:       GET /             → Cloudflare Worker serves the SPA (assets only)
+Both:        POST /api/resolve → cors → rateLimit → apiKeyAuth → validateUrl
+                                 → yt-dlp probe → buildChoices → HMAC-signed URLs
+             GET  /api/download → verify signature → yt-dlp exec → stream + cleanup
 ```
 
-- **Single origin**: Hono serves the built SPA (`packages/web/dist` copied to `./public` in the Docker image) and `/api/*` on one port. In dev, Vite (`:5173`) serves the UI and proxies `/api` to the API (`:3001`).
-- **yt-dlp engine**: API uses `ensureYtDlp()` (`packages/api/src/lib/ytdlp.ts`) to resolve or download the standalone `yt-dlp` binary on demand. yt-dlp uses the `ffmpeg` binary available on the system PATH for merging and extraction.
-- **Environment loading**: web reads build-time env via `import.meta.env`; browser-exposed vars MUST use Vite's `VITE_` prefix. API reads `process.env`.
-- **Rate limit**: ignores generic `x-forwarded-for`; uses `cf-connecting-ip` / `fly-client-ip` from a trusted proxy, falls back to hashed user-agent. See `packages/api/src/middleware/rate-limit.ts`.
-- **URL validation**: `detectPlatform()` matches the parsed hostname against `PLATFORM_HOSTS` derived from `SERVICES` in `packages/shared/src/constants.ts`.
+- **Middleware order** (`src/app.ts`): `pinoLogger` (all) → `cors` → `rateLimit` → `apiKeyAuth`, all on `/api/*`, then routers at `/`. `app.onError` is the global net. `GET /health` is at root, outside `/api/*`, so it bypasses all middleware.
+- **Signed downloads**: `/api/resolve` builds each choice's `/api/download` URL absolute to the API origin and HMAC-signs the params (`lib/security.ts`). Cross-origin downloads need no CORS because they are an `<a download>` navigation, not a `fetch`. Only `POST /api/resolve` is a cross-origin `fetch`, gated by `ALLOWED_ORIGINS`. `/api/download` re-validates URL, re-verifies signature (timing-safe), and re-validates options at the boundary.
+- **Two error shapes on `/api/resolve`**: validation failures → `400 {success:false, error}`; engine failures → `200 {status:"error", error:{code,message}}`. Clients branch on both `!response.ok` and `data.status === "error"`.
+- **Engine** (`lib/ytdlp.ts`): `ensureYtDlp()` resolves the binary (PATH → `$YTDLP_DIR` cache → download), `probe()` runs `yt-dlp -J` and shape-guards stdout via `parseVideoInfo()`, `buildChoices()` derives video/audio choices, `executeDownload()` streams the file. `ffmpeg` on PATH is required for merges and audio extraction.
+- **Env access split**: request-scoped config (`ALLOWED_ORIGINS`, `API_RATE_LIMIT_*`, `API_KEY`, `PROXY_SIGNING_KEY`) via `env(c)`; process-lifetime config (`PORT`, `STATIC_ROOT`, `LOG_LEVEL`, `SENTRY_DSN`, `YTDLP_DIR`) via `process.env`. Web reads `import.meta.env` (`VITE_` prefix only).
 
-## Key Directories & Files
+## Key Directories
 
-- `packages/shared/src/constants.ts` — single source of truth for supported services and host allowlists.
-- `packages/shared/src/validation.ts` — `validateUrl()`, `detectPlatform()`, `sanitizeUrl()`, pure validation.
-- `packages/api/src/index.ts` — Hono app: logger → CORS → rateLimit (on `/api/*`) → routes → `serveStatic` fallback.
-- `packages/api/src/routes/download.ts` — `/api/resolve` & `/api/download`: validate → probe/download via yt-dlp → stream output.
-- `packages/api/src/lib/ytdlp.ts` — `ensureYtDlp()`, `probe()`, `buildChoices()`, `executeDownload()`.
-- `packages/api/src/middleware/rate-limit.ts` — in-memory rate limiting.
-- `packages/web/src/components/DownloaderApp.tsx` — React UI state & download launcher.
-- `packages/api/Dockerfile` — multi-stage Bun runtime container with `ffmpeg` & `python3`.
-- `docker-compose.yml` — runs `snatch-app` service.
+- `packages/shared/src/` — types, constants, pure URL validation; zero deps.
+- `packages/api/src/routes/` — one Hono router per file, exported as `<name>Router`.
+- `packages/api/src/lib/` — engine + singletons (`ytdlp`, `security`, `logger`, `sentry`).
+- `packages/api/src/middleware/` — `/api/*` middleware (`rate-limit`, `auth`).
+- `packages/api/src/schemas/` — Zod request narrowing.
+- `packages/web/src/routes/` — file-based TanStack Router routes.
+- `packages/web/src/components/` — React UI (`DownloaderApp`, `DownloaderInput`, `SettingsDrawer`, `ErrorBoundary`).
+
+## Important Files
+
+- `packages/api/src/index.ts` — Bun entry: layers `serveStatic` over the app, exports `{ port, fetch }`.
+- `packages/api/src/app.ts` — Hono app + middleware chain; default-exports the raw `app`.
+- `packages/api/src/routes/download.ts` — `POST /api/resolve`, signed `GET /api/download`, `GET /api/info`.
+- `packages/api/src/lib/ytdlp.ts` — `ensureYtDlp`/`probe`/`buildChoices`/`executeDownload`/`parseVideoInfo`.
+- `packages/api/src/lib/security.ts` — `signUrl`/`verifyUrl` (HMAC-SHA256, timing-safe), `sanitizeFilename`, `getSecret`.
+- `packages/api/src/middleware/rate-limit.ts` — in-memory limiter keyed by `cf-connecting-ip`/`fly-client-ip` (not `x-forwarded-for`), UA-hash fallback; exports `clearClients()`.
+- `packages/api/src/middleware/auth.ts` — `apiKeyAuth()`: optional `API_KEY`-gated `Authorization: Api-Key <value>`, no-op when unset.
+- `packages/api/src/schemas/media.ts` — `resolveInputSchema` layers shared `validateUrl` onto structural Zod checks; narrow new request options here.
+- `packages/shared/src/validation.ts` — exports only `validateUrl()` and `detectPlatform()` (pure). No `sanitizeUrl`.
+- `packages/shared/src/constants.ts` — `SERVICES`, `PLATFORM_HOSTS` (single source of truth). `types.ts` — wire contract + `AUDIO_FORMATS`/`VIDEO_QUALITIES`/`DOWNLOAD_MODES`.
+- `packages/web/src/config.ts` — `API_BASE_URL` from `VITE_API_BASE_URL`. `components/DownloaderApp.tsx` — owns UI state + resolve/download flow.
+- `packages/web/src/routeTree.gen.ts` — generated; commit it, never edit, excluded from Biome.
+- `biome.json`, `bunfig.toml` (`[test] root="."`), `wrangler.jsonc` (assets-only SPA Worker → `packages/web/dist/client`), `packages/api/Dockerfile` (two-stage; runtime installs `ca-certificates` + `ffmpeg` only), `docker-compose.yml` (external `dokploy-network` required), `.env.example`, `.github/workflows/ci.yml`.
 
 ## Development Commands
 
 ```bash
-# Install (root)
-bun install
+bun install          # root; runs `lefthook install` via prepare
 
 # Dev (two terminals)
-bun dev:api        # http://localhost:3001 — API with --watch
-bun dev            # http://localhost:5173 — Vite, proxies /api → :3001
+bun dev:api          # :3001 — API with --watch
+bun dev              # :5173 — Vite, proxies /api → :3001
 
-# Build
-bun build          # shared typecheck + api build + web build
-bun build:api      # shared typecheck + api build
-bun build:web      # web SPA only
+# Build / deploy — ALWAYS `bun run` for aggregate scripts
+bun run build        # shared typecheck + api build + web build
+bun run build:cf     # shared typecheck + web build (Cloudflare Worker frontend)
+bun run deploy:cf    # wrangler deploy (assets-only Worker; needs Workers Scripts:Edit token)
 
-# Test (bun:test, root = ".")
-bun test           # all packages
-bun test:shared    # single package
-bun test:api
-bun test:web
+bun test             # all packages (bunfig.toml discovers every *.test.ts)
+bun run typecheck    # tsc --noEmit across all packages (pre-push hook)
+bun run check        # biome check --fix .  (pre-commit runs Biome on staged files)
 
-# Lint / Format / Typecheck (Biome)
-bun lint           # biome check .
-bun lint:fix       # biome check --fix .
-bun format         # biome format --write .
-bun check          # alias for lint:fix (used by pre-commit)
-bun typecheck      # tsc --noEmit across all packages (used by pre-push)
-
-# Docker
-bun docker:up      # docker compose up -d --build
-bun docker:down    # docker compose down
+bun run docker:up    # docker compose up -d --build
 ```
 
-## Runtime / Tooling Constraints
+> **Gotcha**: `build`/`test` collide with Bun's reserved subcommands. Bare `bun test` works via `bunfig.toml`, but **bare `bun build` runs the bundler, not the aggregate script** — always `bun run build`. CI and the Dockerfile use `bun run`.
 
-- **Bun >= 1.3**
-- **Single package manager**: Bun workspaces.
-- **No SSR**.
-- **Browser-exposed env vars must use `VITE_` prefix**.
+## Code Conventions & Common Patterns
 
-## Pre-Commit / Pre-Push Hooks (Husky)
+- **Biome** owns formatting + linting. Tabs, line width **100**, double quotes, semicolons always, trailing commas all. Blocking: `noUnusedVariables`/`noUnusedImports`/`useConst`/`noUselessStringConcat` **error**; `noNonNullAssertion`/`noExplicitAny` **warn**. Scans `packages/*/src` (+ `api/test`), excludes `routeTree.gen.ts`.
+- **Clean cutover**: migrate every caller and delete the old path — no aliases, shims, dead code, or commented-out blocks.
+- **Validate at boundaries**: URL validation lives in `shared` (pure); the API Zod schema calls `validateUrl()`; the web form uses Zod plus `detectPlatform()` at submit. Untrusted yt-dlp stdout passes through `parseVideoInfo()`. Keep `shared` zero-dependency.
+- **Boundary narrowing**: request options flow through `schemas/media.ts`. Add new options to the shared enum arrays, not ad-hoc string checks.
+- **Hono routes**: one file per router under `routes/`, exported `<name>Router`, mounted `app.route("/", <name>Router)`. Handlers always return `c.json(...)` with an explicit status.
+- **React state**: no state library — `useState` per concern in `DownloaderApp`; TanStack Form owns form values. Root wraps the app in `ErrorBoundary`. `lucide-react` icons. Tailwind v4 is CSS-first (`src/styles.css`, no `tailwind.config.js`).
+- **Sentry** is DSN-gated and independent per side: `@sentry/bun` (`SENTRY_DSN`) in API, `@sentry/react` (`VITE_SENTRY_DSN`) in SPA.
 
-- **pre-commit** → `bun run check` (Biome lint + format auto-fix).
-- **pre-push** → `bun run typecheck`.
+## Runtime / Tooling Preferences
 
-## Commit Attribution
+- **Bun 1.3.14** (pinned in `packageManager`, CI, and both Docker stages). Bun workspaces only — fan-out via `bun --filter '<pkg>' <script>`; no turborepo/nx.
+- **TanStack Start in SPA mode** (`ssr: false`); no SSR runtime is deployed. Server-side React / SSR is an anti-pattern here.
+- **Browser-exposed env vars must use the `VITE_` prefix**; `VITE_SENTRY_DSN` also flows in as a Docker build ARG.
+- Each package has a standalone strict `tsconfig.json` (`ES2022`, `moduleResolution bundler`, `noEmit`); no shared base, no project references.
 
-AI-assisted commits MUST include:
+## Testing & QA
 
-```
-Co-Authored-By: Claude <noreply@anthropic.com>
-```
+- **Framework**: `bun:test` only (`describe`/`it`/`expect`/`beforeEach`/`afterEach`). No mocking library — isolation via real code paths, env save/restore, and the exported `clearClients()` hook.
+- **HTTP pattern**: `app.fetch(new Request(...))` against a throwaway `new Hono()` (`createTestApp()` helper) or the real singleton from `../src/app`. Prefer `../src/app`, not `../src/index` (the latter mounts `serveStatic` + inits Sentry on import).
+- **Coverage**: shared validation/hardening; API `apiKeyAuth`, `rateLimit`, resolve validation, signed `/api/download`, `buildChoices`, CORS-rejection. No coverage tooling configured.
+- **No web unit tests** — the SPA is exercised via the browser.
+- **Real downloads** need `yt-dlp` (auto-provisioned) and `ffmpeg` on PATH.
+- **Smoke test**: `bun dev:api` + `bun dev`, open `http://localhost:5173`, paste a URL — unsupported host → red error card; valid host → format picker.
+
+## Environment Variables
+
+| Var | Service | Default | Purpose |
+|---|---|---|---|
+| `APP_PORT` | docker-compose | `38700` | Host port for `app` |
+| `PORT` | API | `3001` | Container listen port |
+| `ALLOWED_ORIGINS` | API | `""` (reject all) | Comma-separated CORS allowlist for `/api/*`. **Split** must include the Worker origin |
+| `API_KEY` | API | `""` (public) | When set, `/api/*` requires `Authorization: Api-Key <value>` |
+| `API_RATE_LIMIT_MAX` / `_WINDOW` | API | `30` / `60000` | Rate limit count / window (ms) |
+| `PROXY_SIGNING_KEY` | API | `""` (random) | HMAC key for media URLs. Empty → random per-process key (links die on restart) |
+| `STATIC_ROOT` | API | `./public` | Static SPA directory |
+| `LOG_LEVEL` | API | `info` | Pino log level |
+| `SENTRY_DSN` | API | `""` | `@sentry/bun` DSN; disabled when unset |
+| `YTDLP_DIR` | API | `~/.snatch/bin` | yt-dlp binary cache (Docker: `/data/yt-dlp`) |
+| `VITE_API_TARGET` | web (dev) | `http://localhost:3001` | Vite `/api` proxy target |
+| `VITE_API_BASE_URL` | web (build) | `""` (same-origin) | **Split** only: absolute API origin baked into the client |
+| `VITE_SENTRY_DSN` | web (build) | `""` | `@sentry/react` DSN; disabled when unset |
+
+## CI, Git Hooks & Attribution
+
+- **CI** (`.github/workflows/ci.yml`, on PR + push to `main`): install → `bunx biome ci .` → `bun run typecheck` → `bun test` → `bun run build`. Validation-only; deploys happen out-of-band (Dokploy webhook; Cloudflare Worker build runs `build:cf` + `deploy:cf`).
+- **Git hooks: lefthook** (not Husky). pre-commit → Biome on staged files (auto-stages fixes); pre-push → `bun run typecheck`.
+- AI-assisted commits MUST include: `Co-Authored-By: Claude <noreply@anthropic.com>`.
+
+## Definition of Done
+
+- `bun run check` and `bun run typecheck` pass.
+- `bun test` passes.
+- `bun run build` produces `packages/web/dist/client` and `packages/api/dist/index.js`.
+- UI changes: browser smoke-test. API changes: verify in `packages/api/test/`.
+
+## Anti-Patterns (avoid without discussion)
+
+- Adding a runtime dependency to `packages/shared`.
+- Hand-rolling URL parsing outside `validateUrl` / `detectPlatform`.
+- Server-side React / SSR.
+- Bare `bun build` for the aggregate build (use `bun run build`).
+- Bypassing lefthook hooks with `--no-verify`.
+- Dead code, unused exports, or commented-out code instead of a clean delete.
+- "MVP" / "scaffold" / "TODO: implement" labels in shipped code.
+
+> The `docs/superpowers/` plans describe a prior Astro-based architecture and are **historical** — don't treat their file paths as authoritative.

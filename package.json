@@ -11,6 +11,8 @@
 		"build": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build && bun --filter '@snatch/web' build",
 		"build:api": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build",
 		"build:web": "bun --filter '@snatch/web' build",
+		"build:cf": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/web' build",
+		"deploy:cf": "bunx wrangler@4 deploy",
 		"preview": "bun --filter '@snatch/web' preview",
 		"test": "bun --filter '*' test",
 		"test:shared": "bun --filter '@snatch/shared' test",
@@ -21,14 +23,13 @@
 		"lint:fix": "biome check --fix .",
 		"format": "biome format --write .",
 		"check": "biome check --fix .",
-		"deploy:cf": "echo 'Cloudflare Workers deployment removed. Deploy via Docker/Dokploy instead.'",
 		"docker:up": "docker compose up -d --build",
 		"docker:down": "docker compose down",
-		"prepare": "husky"
+		"prepare": "lefthook install"
 	},
 	"devDependencies": {
-		"@biomejs/biome": "^2.5.3",
-		"husky": "^9.1.7",
-		"@types/bun": "latest"
+		"@biomejs/biome": "^2.5.5",
+		"@types/bun": "latest",
+		"lefthook": "^2.1.10"
 	}
 }

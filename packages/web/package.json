@@ -10,10 +10,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sentry/react": "^10.67.0",
     "@snatch/shared": "workspace:*",
+    "@tanstack/react-form": "^1.33.2",
+    "@tanstack/react-router": "^1.170.18",
+    "@tanstack/react-start": "^1.168.32",
     "lucide-react": "^0.544.0",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0"
+    "react-dom": "^19.2.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.6",

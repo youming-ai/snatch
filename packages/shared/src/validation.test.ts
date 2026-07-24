@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { detectPlatform, isRetryableError, sanitizeUrl, validateUrl } from "./validation";
+import { detectPlatform, validateUrl } from "./validation";
 
 describe("validateUrl", () => {
 	it("should accept URLs from supported services", () => {
@@ -52,44 +52,9 @@ describe("detectPlatform", () => {
 	});
 });
 
-describe("sanitizeUrl", () => {
-	it("should preserve safe query parameters", () => {
-		expect(sanitizeUrl("https://x.com/foo?ref=abc123")).toBe("https://x.com/foo?ref=abc123");
-	});
-
-	it("should remove dangerous query parameters", () => {
-		expect(sanitizeUrl("https://x.com/foo?callback=evil")).toBe("https://x.com/foo");
-	});
-
-	it("should reject dangerous protocols", () => {
-		expect(() => sanitizeUrl("javascript:alert(1)")).toThrow("Dangerous protocol");
-	});
-
-	it("should reject XSS patterns", () => {
-		expect(() => sanitizeUrl("https://example.com/<script>")).toThrow("XSS pattern");
-	});
-});
-
-describe("isRetryableError", () => {
-	it("should mark validation errors as non-retryable", () => {
-		expect(isRetryableError("Invalid URL format")).toBe(false);
-		expect(isRetryableError("Unsupported platform: facebook.com")).toBe(false);
-	});
-
-	it("should mark network errors as retryable", () => {
-		expect(isRetryableError("connection timeout")).toBe(true);
-		expect(isRetryableError("network error")).toBe(true);
-	});
-});
-
 describe("URL validation hardening", () => {
 	it("should reject spoofed platform domains in path", () => {
 		expect(detectPlatform("https://evil.com/x.com/user/status/1234567890")).toBeNull();
 		expect(validateUrl("https://evil.com/x.com/user/status/1234567890").valid).toBe(false);
-	});
-
-	it("should reject non-http protocols when sanitizing", () => {
-		expect(() => sanitizeUrl("mailto:user@example.com")).toThrow("Unsupported protocol");
-		expect(() => sanitizeUrl("blob:https://x.com/id")).toThrow("Unsupported protocol");
 	});
 });

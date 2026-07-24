@@ -1,18 +1,19 @@
 import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
-import {
-	AUDIO_FORMATS,
-	DOWNLOAD_MODES,
-	type MediaOptions,
-	type ResolveResponse,
-	VIDEO_QUALITIES,
-	validateUrl,
-} from "@snatch/shared";
+import { type ResolveResponse, validateUrl } from "@snatch/shared";
 import { type Context, Hono } from "hono";
 import { stream } from "hono/streaming";
 import { sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
-import { buildChoices, ensureYtDlp, executeDownload, probe, type VideoInfo } from "../lib/ytdlp";
+import {
+	buildChoices,
+	ensureYtDlp,
+	executeDownload,
+	parseVideoInfo,
+	probe,
+	type VideoInfo,
+} from "../lib/ytdlp";
+import { mediaOptionsSchema, resolveInputSchema } from "../schemas/media";
 
 const downloadRouter = new Hono();
 
@@ -35,26 +36,6 @@ function downloadPayload(p: DownloadParams): string {
 		p.videoQuality ?? "",
 		p.downloadMode ?? "",
 	]);
-}
-
-type EngineOptions = Pick<MediaOptions, "audioFormat" | "videoQuality" | "downloadMode">;
-
-/** Narrow an untrusted string to a known enum member, else undefined. */
-function narrow<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
-	return value != null && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
-}
-
-/** Validate raw request options at the boundary into the engine's option shape. */
-function normalizeOptions(raw: {
-	audioFormat?: string;
-	videoQuality?: string;
-	downloadMode?: string;
-}): EngineOptions {
-	return {
-		audioFormat: narrow(raw.audioFormat, AUDIO_FORMATS),
-		videoQuality: narrow(raw.videoQuality, VIDEO_QUALITIES),
-		downloadMode: narrow(raw.downloadMode, DOWNLOAD_MODES),
-	};
 }
 
 function generateDownloadUrl(
@@ -82,24 +63,22 @@ function generateDownloadUrl(
  * Resolve media URL formats using yt-dlp.
  */
 downloadRouter.post("/api/resolve", async (c) => {
-	let body: ({ url?: string } & MediaOptions) | null = null;
+	let raw: unknown;
 	try {
-		body = await c.req.json();
+		raw = await c.req.json();
 	} catch {
 		return c.json({ success: false, error: "Invalid JSON in request body" }, 400);
 	}
 
-	if (!body?.url || typeof body.url !== "string") {
-		return c.json({ success: false, error: "URL is required" }, 400);
+	const parsed = resolveInputSchema.safeParse(raw);
+	if (!parsed.success) {
+		return c.json(
+			{ success: false, error: parsed.error.issues[0]?.message ?? "Invalid request" },
+			400,
+		);
 	}
 
-	const { url: rawUrl } = body;
-	const options = normalizeOptions(body);
-	const url = rawUrl.trim();
-	const validation = validateUrl(url);
-	if (!validation.valid) {
-		return c.json({ success: false, error: validation.error }, 400);
-	}
+	const { url, ...options } = parsed.data;
 
 	try {
 		const ytdlp = await ensureYtDlp(c.req.raw.signal);
@@ -166,7 +145,7 @@ downloadRouter.get("/api/download", async (c) => {
 	const videoQuality = c.req.query("videoQuality") ?? "";
 	const downloadMode = c.req.query("downloadMode") ?? "";
 
-	if (!url || !choiceId || infoJsonPath === undefined || !signature) {
+	if (!url || !choiceId || !infoJsonPath || !signature) {
 		return c.json({ success: false, error: "Missing required download parameters" }, 400);
 	}
 
@@ -177,7 +156,9 @@ downloadRouter.get("/api/download", async (c) => {
 
 	// Signature is mandatory: it covers the info-json filesystem path and the
 	// resolution options, so a caller cannot point --load-info-json at an
-	// arbitrary file or tamper with the selected format.
+	// arbitrary file or tamper with the selected format. Signatures are not
+	// single-use, so a saved link can be replayed; reuse is bounded by the
+	// per-client rate limiter that gates all /api/* routes.
 	const payload = downloadPayload({
 		url,
 		choiceId,
@@ -191,26 +172,22 @@ downloadRouter.get("/api/download", async (c) => {
 	}
 
 	// Signature is verified; still validate the carried values at this boundary.
-	const options = normalizeOptions({ audioFormat, videoQuality, downloadMode });
+	const parsedOptions = mediaOptionsSchema.safeParse({ audioFormat, videoQuality, downloadMode });
+	if (!parsedOptions.success) {
+		return c.json({ success: false, error: "Invalid download options" }, 400);
+	}
+	const options = parsedOptions.data;
 
 	try {
 		const ytdlp = await ensureYtDlp(c.req.raw.signal);
 
-		let infoJsonToUse: string | undefined;
+		// The signed URL always carries an info-json path; reuse it, falling
+		// back to a fresh probe only if the cached file is gone or unreadable.
 		let info: VideoInfo | undefined;
-
-		if (infoJsonPath) {
-			try {
-				const rawJson = await fs.readFile(infoJsonPath, "utf-8");
-				info = JSON.parse(rawJson) as VideoInfo;
-				infoJsonToUse = infoJsonPath;
-			} catch {
-				infoJsonToUse = undefined;
-				info = undefined;
-			}
-		}
-
-		if (!info) {
+		let infoJsonToUse = infoJsonPath;
+		try {
+			info = parseVideoInfo(await fs.readFile(infoJsonPath, "utf-8"));
+		} catch {
 			const probed = await probe(ytdlp, url, c.req.raw.signal);
 			info = probed.info;
 			infoJsonToUse = probed.infoJsonPath;

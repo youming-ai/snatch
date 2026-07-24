@@ -3,6 +3,8 @@ services:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
+      args:
+        VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
     container_name: snatch-app
     restart: unless-stopped
     ports:
@@ -10,8 +12,17 @@ services:
     environment:
       - PORT=3001
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+      - API_KEY=${API_KEY:-}
+      - PROXY_SIGNING_KEY=${PROXY_SIGNING_KEY:-}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - SENTRY_DSN=${SENTRY_DSN:-}
+    volumes:
+      - ytdlp-cache:/data
     networks:
       - dokploy-network
+
+volumes:
+  ytdlp-cache:
 
 networks:
   dokploy-network:

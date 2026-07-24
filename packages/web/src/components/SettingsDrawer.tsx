@@ -1,4 +1,5 @@
 import type { MediaOptions } from "@snatch/shared";
+import { VIDEO_QUALITIES } from "@snatch/shared";
 import { Sliders, X } from "lucide-react";
 
 export interface SettingsState extends MediaOptions {
@@ -88,7 +89,8 @@ export function SettingsDrawer({
 							</select>
 						</div>
 
-						{/* Video Quality */}
+						{/* Video Quality — generated from the shared enum so the dropdown
+						     can never drift from VIDEO_QUALITIES again. */}
 						<div className="space-y-1.5">
 							<label htmlFor="videoQuality" className="text-sm font-medium text-zinc-300">
 								Video Quality
@@ -101,11 +103,11 @@ export function SettingsDrawer({
 								}
 								className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50"
 							>
-								<option value="max">Max Quality</option>
-								<option value="1080">1080p</option>
-								<option value="720">720p</option>
-								<option value="480">480p</option>
-								<option value="360">360p</option>
+								{VIDEO_QUALITIES.map((q) => (
+									<option key={q} value={q}>
+										{q === "max" ? "Max Quality" : `${q}p`}
+									</option>
+								))}
 							</select>
 						</div>
 
@@ -149,7 +151,8 @@ export function SettingsDrawer({
 								className="w-full px-3 py-2 bg-zinc-900 border border-zinc-800 rounded-xl text-sm text-white placeholder-zinc-600 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
 							/>
 							<p className="text-xs text-zinc-500 leading-normal">
-								Optional API key for protected server instances.
+								Optional API key for protected server instances. Only honored when the API sets its{" "}
+								<code className="font-mono">API_KEY</code> environment variable.
 							</p>
 						</div>
 					</div>
