@@ -108,14 +108,14 @@ API on Dokploy. The yt-dlp engine cannot run on Workers, so the Worker serves
 only the built client; all `/api/*` calls go to the Dokploy origin.
 
 1. **API (Dokploy)** — deploy the Docker image as above and set
-   `ALLOWED_ORIGINS` to the Worker origin (e.g. `https://snatch.<account>.workers.dev`)
+   `ALLOWED_ORIGINS` to the Worker origin (e.g. `https://snatch.um1ng.me`)
    so the browser may call `/api/resolve` cross-origin.
 2. **Frontend (Cloudflare Worker)** — `wrangler.jsonc` (repo root) configures an
    assets-only Worker serving `packages/web/dist/client` with SPA fallback. In the
    Cloudflare Worker build settings:
    - Build command: `bun run build:cf`
    - Deploy command: `bun run deploy:cf` (runs `wrangler deploy`)
-   - Build env `VITE_API_BASE_URL` = the public API origin (e.g. `https://api.snatch.example`)
+   - Build env `VITE_API_BASE_URL` = the public API origin (e.g. `https://snatch-api.um1ng.me`)
    - The deploy token needs **Account → Workers Scripts → Edit** (plus `CLOUDFLARE_ACCOUNT_ID`)
 
 Downloads stream directly from the API origin via `Content-Disposition`, so
