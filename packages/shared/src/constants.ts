@@ -1,6 +1,6 @@
 /**
- * Every service the media engine (cobalt) can fetch, its display label, and
- * the host(s) whose URLs we accept. cobalt does the real extraction — snatch
+ * Every service the yt-dlp engine can fetch, its display label, and the
+ * host(s) whose URLs we accept. yt-dlp does the real extraction — snatch
  * only gates on a known host, so this list is the single source of truth for
  * both URL validation and the UI's "supported services" grid.
  */

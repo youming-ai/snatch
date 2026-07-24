@@ -1,10 +1,9 @@
-import { detectPlatform, SERVICES, sanitizeCobaltOptions } from "@snatch/shared";
+import { detectPlatform, type ResolveResponse, SERVICES } from "@snatch/shared";
 import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { DownloaderInput } from "./DownloaderInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { DEFAULT_SETTINGS, SettingsDrawer, type SettingsState } from "./SettingsDrawer";
-import { Turnstile } from "./Turnstile";
 
 export function DownloaderApp() {
 	return (
@@ -14,19 +13,7 @@ export function DownloaderApp() {
 	);
 }
 
-interface PickerItem {
-	type: "photo" | "video" | "gif";
-	url: string;
-	thumb?: string;
-}
-
-interface PickerResponse {
-	status: "picker";
-	picker?: PickerItem[];
-	audio?: string;
-	audioFilename?: string;
-	filename?: string;
-}
+type PickerResponse = ResolveResponse;
 
 function DownloaderAppInner() {
 	// Settings & Drawer
@@ -49,14 +36,6 @@ function DownloaderAppInner() {
 	// Multi-Media Picker State
 	const [pickerResponse, setPickerResponse] = useState<PickerResponse | null>(null);
 
-	// Turnstile State
-	const [backendSitekey, setBackendSitekey] = useState<string | null>(null);
-	const [showTurnstile, setShowTurnstile] = useState(false);
-	const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
-
-	// Dynamic Cobalt Backend Service Capabilities
-	const [allowedServiceIds, setAllowedServiceIds] = useState<string[] | null>(null);
-
 	// Sync settings to localStorage
 	const handleSettingsChange = (nextSettings: SettingsState) => {
 		setSettings(nextSettings);
@@ -66,26 +45,6 @@ function DownloaderAppInner() {
 			console.error("Failed to save settings:", err);
 		}
 	};
-
-	// Query backend status / turnstile on mount
-	useEffect(() => {
-		fetch("/api/info")
-			.then((res) => res.json())
-			.then((data) => {
-				const details = data as {
-					cobalt?: { services?: string[]; turnstileSitekey?: string };
-				};
-				if (details.cobalt) {
-					if (details.cobalt.services && Array.isArray(details.cobalt.services)) {
-						setAllowedServiceIds(details.cobalt.services);
-					}
-					if (details.cobalt.turnstileSitekey) {
-						setBackendSitekey(details.cobalt.turnstileSitekey);
-					}
-				}
-			})
-			.catch((err) => console.error("Failed to query backend capabilities:", err));
-	}, []);
 
 	const handleUrlChange = (next: string) => {
 		setUrl(next);
@@ -103,7 +62,7 @@ function DownloaderAppInner() {
 		anchor.remove();
 	}, []);
 
-	const handleDownload = async (forcedToken?: string) => {
+	const handleDownload = async () => {
 		if (!url?.trim()) {
 			setError("Please enter a valid URL");
 			return;
@@ -119,18 +78,13 @@ function DownloaderAppInner() {
 		setSavedName(null);
 		setPickerResponse(null);
 
-		const { apiKey, ...rawCobaltOptions } = settings;
-		const cobaltOptions = sanitizeCobaltOptions(rawCobaltOptions);
+		const { apiKey, ...mediaOptions } = settings;
 
 		const headers: Record<string, string> = {
 			"Content-Type": "application/json",
 		};
 		if (apiKey) {
 			headers.Authorization = `Api-Key ${apiKey}`;
-		}
-		const token = forcedToken || turnstileToken;
-		if (token) {
-			headers["cf-turnstile-response"] = token;
 		}
 
 		try {
@@ -139,47 +93,27 @@ function DownloaderAppInner() {
 				headers,
 				body: JSON.stringify({
 					url: url.trim(),
-					...cobaltOptions,
+					...mediaOptions,
 				}),
 			});
+			const data = (await response.json().catch(() => ({}))) as
+				| ResolveResponse
+				| { success?: boolean; error?: string };
 
-			if (!response.ok) {
-				const errData = (await response.json().catch(() => ({}))) as { error?: string };
-				throw new Error(errData.error || "Failed to resolve media");
+			if ("success" in data) {
+				throw new Error(typeof data.error === "string" ? data.error : "Failed to resolve media");
 			}
 
-			interface ResolveJson {
-				status: "tunnel" | "redirect" | "picker" | "error";
-				url?: string;
-				filename?: string;
-				picker?: PickerItem[];
-				audio?: string;
-				audioFilename?: string;
-				error?: { code?: string };
+			const resolveData = data as ResolveResponse;
+
+			if (resolveData.status === "error") {
+				throw new Error(
+					resolveData.error?.message || resolveData.error?.code || "Failed to resolve media",
+				);
 			}
 
-			const data = (await response.json()) as ResolveJson;
-
-			if (data.status === "error") {
-				const errorCode = data.error?.code || "";
-				if (errorCode.includes("turnstile.missing") && backendSitekey) {
-					setShowTurnstile(true);
-					setError("Verification required. Please solve the security widget below.");
-				} else {
-					throw new Error(errorCode || "Cobalt resolved with an error");
-				}
-				return;
-			}
-
-			if (data.status === "tunnel" || data.status === "redirect") {
-				if (!data.url) throw new Error("No download URL returned");
-				triggerDownload(data.url);
-				setSavedName(data.filename || "file");
-				// Hide Turnstile once successfully solved and cleared
-				setShowTurnstile(false);
-			} else if (data.status === "picker") {
-				setPickerResponse(data as PickerResponse);
-				setShowTurnstile(false);
+			if (resolveData.status === "picker") {
+				setPickerResponse(resolveData);
 			}
 		} catch (err) {
 			console.error("Resolution error:", err);
@@ -188,16 +122,6 @@ function DownloaderAppInner() {
 			setLoading(false);
 		}
 	};
-
-	const handleTurnstileVerify = (token: string) => {
-		setTurnstileToken(token);
-		// Retrigger download immediately upon verification
-		handleDownload(token);
-	};
-
-	const activeServices = SERVICES.filter(
-		(s) => !allowedServiceIds || allowedServiceIds.includes(s.id),
-	);
 
 	return (
 		<div className="min-h-screen bg-black text-white selection:bg-purple-500/30">
@@ -231,7 +155,7 @@ function DownloaderAppInner() {
 								<span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
 							</span>
 							<span className="text-sm font-medium text-gray-300">
-								{activeServices.length}+ services supported
+								{SERVICES.length}+ services supported
 							</span>
 						</div>
 
@@ -256,21 +180,6 @@ function DownloaderAppInner() {
 							loading={loading}
 						/>
 					</div>
-
-					{/* Turnstile Widget */}
-					{showTurnstile && backendSitekey && (
-						<div className="max-w-md mx-auto p-4 bg-zinc-900 border border-zinc-800 rounded-2xl animate-in fade-in duration-300">
-							<Turnstile
-								sitekey={backendSitekey}
-								onVerify={handleTurnstileVerify}
-								onExpire={() => setTurnstileToken(null)}
-								onError={() => {
-									setTurnstileToken(null);
-									setError("Security verification failed. Please try again.");
-								}}
-							/>
-						</div>
-					)}
 
 					{error && (
 						<div className="max-w-2xl mx-auto animate-in fade-in zoom-in duration-300">
@@ -316,77 +225,57 @@ function DownloaderAppInner() {
 						</div>
 					)}
 
-					{/* Multi-Media Picker Panel */}
+					{/* Format Picker Panel */}
 					{pickerResponse?.picker && (
-						<div className="max-w-4xl mx-auto space-y-6 text-left animate-in fade-in zoom-in duration-300 p-6 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
-							<div className="flex items-center justify-between">
-								<div>
-									<h3 className="text-lg font-bold text-white">Choose media to download</h3>
-									<p className="text-xs text-zinc-500 mt-1">
-										This post contains multiple assets. Select items to download them.
-									</p>
+						<div className="max-w-2xl mx-auto space-y-6 text-left animate-in fade-in zoom-in duration-300 p-6 bg-zinc-900/40 border border-zinc-800 rounded-2xl">
+							<div className="flex items-start justify-between gap-4">
+								<div className="flex items-center gap-3 min-w-0">
+									{pickerResponse.thumbnail && (
+										<img
+											src={pickerResponse.thumbnail}
+											alt=""
+											className="w-16 h-16 rounded-lg object-cover shrink-0 bg-zinc-950"
+										/>
+									)}
+									<div className="min-w-0">
+										<h3 className="text-lg font-bold text-white truncate">
+											{pickerResponse.title || "Choose a format"}
+										</h3>
+										<p className="text-xs text-zinc-500 mt-1">
+											Pick a resolution or audio-only format to download.
+										</p>
+									</div>
 								</div>
 								<button
 									type="button"
 									onClick={() => setPickerResponse(null)}
-									className="p-1 px-3 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-white/5"
+									className="shrink-0 p-1 px-3 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-white/5"
 								>
-									Clear selection
+									Clear
 								</button>
 							</div>
 
-							<div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+							<div className="flex flex-col gap-2">
 								{pickerResponse.picker.map((item) => (
-									<div
-										key={item.url}
-										className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden flex flex-col group"
+									<button
+										key={item.id || item.url}
+										type="button"
+										onClick={() => {
+											triggerDownload(item.url);
+											setSavedName(item.label || item.quality || "file");
+										}}
+										className="w-full px-4 py-3 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-purple-500/40 rounded-xl text-sm font-medium text-zinc-200 transition-colors flex items-center justify-between gap-3"
 									>
-										<div className="aspect-square bg-zinc-950 relative overflow-hidden flex items-center justify-center">
-											{item.thumb ? (
-												<img
-													src={item.thumb}
-													alt={item.type}
-													className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-												/>
-											) : (
-												<span className="text-zinc-500 capitalize text-xs">{item.type}</span>
-											)}
-											<span className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[9px] uppercase font-bold text-zinc-300 tracking-wider">
+										<span className="flex items-center gap-2 min-w-0">
+											<span className="px-2 py-0.5 rounded bg-black/60 text-[9px] uppercase font-bold text-zinc-400 tracking-wider shrink-0">
 												{item.type}
 											</span>
-										</div>
-										<div className="p-3">
-											<button
-												type="button"
-												onClick={() => triggerDownload(item.url)}
-												className="w-full py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs transition-colors flex items-center justify-center gap-1.5"
-											>
-												<Download className="w-3.5 h-3.5" />
-												Download
-											</button>
-										</div>
-									</div>
+											<span className="truncate">{item.label || item.quality || item.ext}</span>
+										</span>
+										<Download className="w-4 h-4 shrink-0 text-purple-400" />
+									</button>
 								))}
 							</div>
-
-							{pickerResponse.audio && (
-								<div className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl flex items-center justify-between gap-4">
-									<div className="min-w-0 flex-1">
-										<p className="text-sm font-semibold text-zinc-200">Background Audio</p>
-										<p className="text-xs text-zinc-500 truncate font-mono mt-0.5">
-											{pickerResponse.audioFilename || "audio.mp3"}
-										</p>
-									</div>
-									<button
-										type="button"
-										onClick={() => triggerDownload(pickerResponse.audio || "")}
-										className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-semibold rounded-lg text-xs transition-colors flex items-center gap-1.5"
-									>
-										<Download className="w-3.5 h-3.5" />
-										Download Audio
-									</button>
-								</div>
-							)}
 						</div>
 					)}
 				</div>
@@ -417,7 +306,7 @@ function DownloaderAppInner() {
 					</div>
 
 					<div className="flex flex-wrap justify-center gap-2.5">
-						{activeServices.map((service) => (
+						{SERVICES.map((service) => (
 							<span
 								key={service.id}
 								className="px-3.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-sm text-gray-300 hover:border-white/25 hover:text-white transition-colors animate-in fade-in duration-300"

@@ -7,35 +7,44 @@ export interface ErrorResponse {
 	error: string;
 }
 
-export interface CobaltOptions {
-	audioBitrate?: "320" | "256" | "128" | "96" | "64" | "8";
-	audioFormat?: "best" | "mp3" | "ogg" | "wav" | "opus";
-	downloadMode?: "auto" | "audio" | "mute";
-	filenameStyle?: "classic" | "pretty" | "basic" | "nerdy";
-	videoQuality?: "max" | "4320" | "2160" | "1440" | "1080" | "720" | "480" | "360" | "240" | "144";
-	disableMetadata?: boolean;
-	alwaysProxy?: boolean;
-	localProcessing?: "disabled" | "preferred" | "forced";
-	subtitleLang?: string;
-	youtubeVideoCodec?: "h264" | "av1" | "vp9";
-	youtubeVideoContainer?: "auto" | "mp4" | "webm" | "mkv";
-	youtubeDubLang?: string;
-	convertGif?: boolean;
-	allowH265?: boolean;
-	tiktokFullAudio?: boolean;
-	youtubeBetterAudio?: boolean;
-	youtubeHLS?: boolean;
+export const AUDIO_FORMATS = ["mp3", "ogg", "wav", "opus"] as const;
+export const VIDEO_QUALITIES = [
+	"max",
+	"4320",
+	"2160",
+	"1440",
+	"1080",
+	"720",
+	"480",
+	"360",
+	"240",
+	"144",
+] as const;
+export const DOWNLOAD_MODES = ["auto", "audio"] as const;
+
+/** Resolution options the yt-dlp engine actually honors (see buildChoices). */
+export interface MediaOptions {
+	audioFormat?: (typeof AUDIO_FORMATS)[number];
+	videoQuality?: (typeof VIDEO_QUALITIES)[number];
+	downloadMode?: (typeof DOWNLOAD_MODES)[number];
 }
 
-export interface CobaltResponse {
-	status: "tunnel" | "redirect" | "picker" | "local-processing" | "error";
-	url?: string;
+export interface MediaChoiceItem {
+	id?: string;
+	type: "video" | "audio";
+	quality?: string;
+	ext?: string;
+	label?: string;
+	url: string;
+	thumb?: string;
+}
+
+export interface ResolveResponse {
+	status: "picker" | "error";
 	filename?: string;
-	picker?: { type: "photo" | "video" | "gif"; url: string; thumb?: string }[];
-	audio?: string;
-	audioFilename?: string;
-	tunnels?: string[];
-	type?: string;
-	service?: string;
-	error?: { code?: string; context?: { service?: string; limit?: number } };
+	title?: string;
+	thumbnail?: string;
+	duration?: number;
+	picker?: MediaChoiceItem[];
+	error?: { code?: string; message?: string; context?: Record<string, unknown> };
 }

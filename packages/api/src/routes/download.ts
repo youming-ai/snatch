@@ -1,195 +1,173 @@
+import { createReadStream } from "node:fs";
+import fs from "node:fs/promises";
+import path from "node:path";
 import {
-	type CobaltOptions,
-	type CobaltResponse,
-	sanitizeCobaltOptions,
+	AUDIO_FORMATS,
+	DOWNLOAD_MODES,
+	type MediaOptions,
+	type ResolveResponse,
+	VIDEO_QUALITIES,
 	validateUrl,
 } from "@snatch/shared";
 import { type Context, Hono } from "hono";
-import { env } from "hono/adapter";
 import { stream } from "hono/streaming";
-import { getCobaltInfo, resolveViaCobalt } from "../lib/cobalt";
-import { isSafeUrl, sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
+import { sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
+import { buildChoices, ensureYtDlp, executeDownload, probe, type VideoInfo } from "../lib/ytdlp";
 
 const downloadRouter = new Hono();
 
-/**
- * Helper to rewrite raw cobalt URLs to point to our proxy endpoints,
- * keeping the cobalt instance internal-only.
- */
-function rewriteCobaltUrls(data: CobaltResponse, origin: string, c: Context): CobaltResponse {
-	const result = { ...data };
+interface DownloadParams {
+	url: string;
+	choiceId: string;
+	infoJson: string;
+	audioFormat?: string;
+	videoQuality?: string;
+	downloadMode?: string;
+}
 
-	if (result.status === "tunnel" || result.status === "redirect") {
-		if (result.url) {
-			const sig = signUrl(result.url, c);
-			result.url = `${origin}/api/proxy?url=${encodeURIComponent(result.url)}&sig=${sig}&filename=${encodeURIComponent(result.filename || "file")}`;
-		}
-	} else if (result.status === "picker" && result.picker) {
-		result.picker = result.picker.map((item) => {
-			const sig = signUrl(item.url, c);
-			return {
-				...item,
-				url: `${origin}/api/proxy?url=${encodeURIComponent(item.url)}&sig=${sig}&filename=${encodeURIComponent(result.filename || "file")}`,
-			};
-		});
-	} else if (result.status === "local-processing") {
-		// Detect if we are running in the Bun environment.
-		// If not (e.g. Cloudflare Workers), gracefully degrade by returning a client error status.
-		if (typeof Bun !== "undefined") {
-			const tunnelsJson = JSON.stringify(result.tunnels || []);
-			const sig = signUrl(tunnelsJson, c);
-			result.status = "tunnel";
-			result.url = `${origin}/api/local-process?tunnels=${encodeURIComponent(tunnelsJson)}&sig=${sig}&type=${result.type || "merge"}&filename=${encodeURIComponent(result.filename || "file")}`;
-		} else {
-			result.status = "error";
-			result.error = {
-				code: "api.local_processing_unsupported",
-				context: { service: result.service || "unknown" },
-			};
-		}
-	}
+/** Canonical, signature-covered payload shared by the resolve and download routes. */
+function downloadPayload(p: DownloadParams): string {
+	return JSON.stringify([
+		p.url,
+		p.choiceId,
+		p.infoJson,
+		p.audioFormat ?? "",
+		p.videoQuality ?? "",
+		p.downloadMode ?? "",
+	]);
+}
 
-	return result;
+type EngineOptions = Pick<MediaOptions, "audioFormat" | "videoQuality" | "downloadMode">;
+
+/** Narrow an untrusted string to a known enum member, else undefined. */
+function narrow<T extends string>(value: string | undefined, allowed: readonly T[]): T | undefined {
+	return value != null && (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
+}
+
+/** Validate raw request options at the boundary into the engine's option shape. */
+function normalizeOptions(raw: {
+	audioFormat?: string;
+	videoQuality?: string;
+	downloadMode?: string;
+}): EngineOptions {
+	return {
+		audioFormat: narrow(raw.audioFormat, AUDIO_FORMATS),
+		videoQuality: narrow(raw.videoQuality, VIDEO_QUALITIES),
+		downloadMode: narrow(raw.downloadMode, DOWNLOAD_MODES),
+	};
+}
+
+function generateDownloadUrl(
+	params: DownloadParams,
+	filename: string,
+	origin: string,
+	c: Context,
+): string {
+	const sig = signUrl(downloadPayload(params), c);
+	const query = new URLSearchParams({
+		url: params.url,
+		choiceId: params.choiceId,
+		infoJson: params.infoJson,
+		filename,
+		audioFormat: params.audioFormat ?? "",
+		videoQuality: params.videoQuality ?? "",
+		downloadMode: params.downloadMode ?? "",
+		sig,
+	});
+	return `${origin}/api/download?${query.toString()}`;
 }
 
 /**
  * POST /api/resolve
- * Resolve a media link with custom settings and headers, returning a structured JSON response.
+ * Resolve media URL formats using yt-dlp.
  */
 downloadRouter.post("/api/resolve", async (c) => {
-	let body: ({ url?: string } & CobaltOptions) | null = null;
+	let body: ({ url?: string } & MediaOptions) | null = null;
 	try {
 		body = await c.req.json();
 	} catch {
 		return c.json({ success: false, error: "Invalid JSON in request body" }, 400);
 	}
 
-	if (!body) {
-		return c.json({ success: false, error: "Request body is required" }, 400);
-	}
-
-	const { url, ...options } = body;
-	if (!url || typeof url !== "string") {
+	if (!body?.url || typeof body.url !== "string") {
 		return c.json({ success: false, error: "URL is required" }, 400);
 	}
 
+	const { url: rawUrl } = body;
+	const options = normalizeOptions(body);
+	const url = rawUrl.trim();
 	const validation = validateUrl(url);
 	if (!validation.valid) {
 		return c.json({ success: false, error: validation.error }, 400);
 	}
 
-	const authHeaders: Record<string, string> = {};
-	const authHeader = c.req.header("Authorization");
-	if (authHeader) authHeaders.Authorization = authHeader;
-	const turnstileHeader = c.req.header("cf-turnstile-response");
-	if (turnstileHeader) authHeaders["cf-turnstile-response"] = turnstileHeader;
-
 	try {
-		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
-		const cleanOptions = sanitizeCobaltOptions(options);
-		const rawResponse = await resolveViaCobalt(
-			url,
-			cleanOptions as CobaltOptions,
-			authHeaders,
-			cobaltUrl,
-		);
-
-		if (rawResponse.status === "error") {
-			return c.json(rawResponse);
-		}
-
+		const ytdlp = await ensureYtDlp(c.req.raw.signal);
+		const { info, infoJsonPath } = await probe(ytdlp, url, c.req.raw.signal);
+		const choices = buildChoices(info, options);
 		const origin = new URL(c.req.url).origin;
-		const rewritten = rewriteCobaltUrls(rawResponse, origin, c);
-		return c.json(rewritten);
+		const titleBase = (info.title || "media").slice(0, 50);
+
+		const picker = choices.map((choice) => ({
+			id: choice.id,
+			type: choice.kind,
+			quality: choice.quality,
+			ext: choice.ext,
+			label: choice.label,
+			url: generateDownloadUrl(
+				{
+					url,
+					choiceId: choice.id,
+					infoJson: infoJsonPath,
+					audioFormat: options.audioFormat,
+					videoQuality: options.videoQuality,
+					downloadMode: options.downloadMode,
+				},
+				`${titleBase}.${choice.ext}`,
+				origin,
+				c,
+			),
+			thumb: info.thumbnail,
+		}));
+
+		const response: ResolveResponse = {
+			status: "picker",
+			title: info.title,
+			thumbnail: info.thumbnail,
+			duration: info.duration,
+			filename: `${titleBase}.mp4`,
+			picker,
+		};
+
+		return c.json(response);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Resolution failed";
-		return c.json({ success: false, error: msg }, 502);
+		return c.json(
+			{
+				status: "error",
+				error: { code: "api.resolve_failed", message: msg },
+			},
+			200,
+		);
 	}
 });
 
 /**
- * GET /api/proxy
- * Tunnel/proxy a resolved media stream through our origin.
- */
-downloadRouter.get("/api/proxy", async (c) => {
-	const targetUrl = c.req.query("url");
-	const signature = c.req.query("sig");
-	const filename = c.req.query("filename") || "file";
-
-	if (!targetUrl || !signature) {
-		return c.json({ success: false, error: "Missing required parameters" }, 400);
-	}
-
-	if (!verifyUrl(targetUrl, signature, c)) {
-		return c.json({ success: false, error: "Invalid signature" }, 403);
-	}
-
-	const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
-	if (!isSafeUrl(targetUrl, cobaltUrl)) {
-		return c.json({ success: false, error: "Forbidden target URL" }, 403);
-	}
-
-	const authHeaders: Record<string, string> = {};
-	const authHeader = c.req.header("Authorization");
-	if (authHeader) authHeaders.Authorization = authHeader;
-
-	let upstream: Response;
-	try {
-		upstream = await fetch(targetUrl, {
-			headers: authHeaders,
-			signal: c.req.raw.signal,
-		});
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Download failed";
-		return c.json({ success: false, error: msg }, 502);
-	}
-
-	if (!upstream.ok || !upstream.body) {
-		return c.json({ success: false, error: `Upstream returned ${upstream.status}` }, 502);
-	}
-
-	c.header("Content-Type", upstream.headers.get("content-type") || "application/octet-stream");
-	c.header("Content-Disposition", `attachment; filename="${sanitizeFilename(filename)}"`);
-	const contentLength = upstream.headers.get("content-length");
-	if (contentLength) c.header("Content-Length", contentLength);
-
-	const body = upstream.body;
-	return stream(c, async (s) => {
-		const reader = body.getReader();
-		try {
-			while (true) {
-				const { done, value } = await reader.read();
-				if (done) break;
-				await s.write(value);
-			}
-		} finally {
-			reader.releaseLock();
-		}
-	});
-});
-
-/**
- * GET /api/info
- * Query capabilities of the cobalt backend instance.
- */
-downloadRouter.get("/api/info", async (c) => {
-	try {
-		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
-		const info = await getCobaltInfo(cobaltUrl);
-		return c.json(info);
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Failed to query cobalt instance";
-		return c.json({ success: false, error: msg }, 502);
-	}
-});
-
-/**
- * GET /api/download (Backwards compatibility endpoint)
+ * GET /api/download
+ * Execute yt-dlp download for selected format choice and stream file to client.
  */
 downloadRouter.get("/api/download", async (c) => {
 	const url = c.req.query("url");
-	if (!url) {
-		return c.json({ success: false, error: "URL is required" }, 400);
+	const choiceId = c.req.query("choiceId");
+	const infoJsonPath = c.req.query("infoJson");
+	const signature = c.req.query("sig");
+	const requestedFilename = c.req.query("filename");
+	const audioFormat = c.req.query("audioFormat") ?? "";
+	const videoQuality = c.req.query("videoQuality") ?? "";
+	const downloadMode = c.req.query("downloadMode") ?? "";
+
+	if (!url || !choiceId || infoJsonPath === undefined || !signature) {
+		return c.json({ success: false, error: "Missing required download parameters" }, 400);
 	}
 
 	const validation = validateUrl(url);
@@ -197,27 +175,109 @@ downloadRouter.get("/api/download", async (c) => {
 		return c.json({ success: false, error: validation.error }, 400);
 	}
 
-	try {
-		const cobaltUrl = (env(c).COBALT_API_URL as string | undefined) || "http://localhost:9000";
-		const rawResponse = await resolveViaCobalt(url, { videoQuality: "max" }, undefined, cobaltUrl);
-		if (rawResponse.status === "error") {
-			throw new Error(`cobalt error: ${rawResponse.error?.code}`);
-		}
-
-		const origin = new URL(c.req.url).origin;
-		const rewritten = rewriteCobaltUrls(rawResponse, origin, c);
-
-		if (rewritten.status === "tunnel" && rewritten.url) {
-			return c.redirect(rewritten.url);
-		}
-		if (rewritten.status === "picker" && rewritten.picker?.[0]?.url) {
-			return c.redirect(rewritten.picker[0].url);
-		}
-		throw new Error(`unsupported cobalt status in simple download: ${rewritten.status}`);
-	} catch (error) {
-		const msg = error instanceof Error ? error.message : "Download failed";
-		return c.json({ success: false, error: msg }, 502);
+	// Signature is mandatory: it covers the info-json filesystem path and the
+	// resolution options, so a caller cannot point --load-info-json at an
+	// arbitrary file or tamper with the selected format.
+	const payload = downloadPayload({
+		url,
+		choiceId,
+		infoJson: infoJsonPath,
+		audioFormat,
+		videoQuality,
+		downloadMode,
+	});
+	if (!verifyUrl(payload, signature, c)) {
+		return c.json({ success: false, error: "Invalid download signature" }, 403);
 	}
+
+	// Signature is verified; still validate the carried values at this boundary.
+	const options = normalizeOptions({ audioFormat, videoQuality, downloadMode });
+
+	try {
+		const ytdlp = await ensureYtDlp(c.req.raw.signal);
+
+		let infoJsonToUse: string | undefined;
+		let info: VideoInfo | undefined;
+
+		if (infoJsonPath) {
+			try {
+				const rawJson = await fs.readFile(infoJsonPath, "utf-8");
+				info = JSON.parse(rawJson) as VideoInfo;
+				infoJsonToUse = infoJsonPath;
+			} catch {
+				infoJsonToUse = undefined;
+				info = undefined;
+			}
+		}
+
+		if (!info) {
+			const probed = await probe(ytdlp, url, c.req.raw.signal);
+			info = probed.info;
+			infoJsonToUse = probed.infoJsonPath;
+		}
+
+		const choices = buildChoices(info, options);
+		const selectedChoice = choices.find((ch) => ch.id === choiceId);
+		if (!selectedChoice) {
+			return c.json({ success: false, error: "Requested format is no longer available" }, 409);
+		}
+
+		const { filePath, cleanup } = await executeDownload(
+			{
+				ytdlp,
+				url,
+				infoJsonPath: infoJsonToUse,
+				args: selectedChoice.args,
+			},
+			c.req.raw.signal,
+		);
+
+		const stat = await fs.stat(filePath);
+		const filename = sanitizeFilename(
+			requestedFilename || path.basename(filePath) || "download.mp4",
+		);
+
+		c.header("Content-Type", contentTypeFor(selectedChoice.kind, selectedChoice.ext));
+		c.header("Content-Disposition", `attachment; filename="${filename}"`);
+		c.header("Content-Length", String(stat.size));
+
+		const readStream = createReadStream(filePath);
+		return stream(c, async (s) => {
+			try {
+				for await (const chunk of readStream) {
+					await s.write(chunk as Uint8Array);
+				}
+			} finally {
+				await cleanup();
+			}
+		});
+	} catch (error) {
+		const msg = error instanceof Error ? error.message : "Download execution failed";
+		return c.json({ success: false, error: msg }, 500);
+	}
+});
+
+const AUDIO_CONTENT_TYPES: Record<string, string> = {
+	mp3: "audio/mpeg",
+	ogg: "audio/ogg",
+	opus: "audio/opus",
+	wav: "audio/wav",
+};
+
+function contentTypeFor(kind: "video" | "audio", ext: string): string {
+	if (kind === "audio") return AUDIO_CONTENT_TYPES[ext] ?? "application/octet-stream";
+	return "video/mp4";
+}
+
+/**
+ * GET /api/info
+ * Query engine status.
+ */
+downloadRouter.get("/api/info", (c) => {
+	return c.json({
+		engine: "yt-dlp",
+		status: "ok",
+	});
 });
 
 export { downloadRouter };

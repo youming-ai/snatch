@@ -1,28 +1,16 @@
-# Deployment topology: the Snatch frontend + API run on Cloudflare Workers
-# (see packages/api/wrangler.json — Worker serves the SPA via Assets and hosts
-# the Hono API). This compose runs ONLY the self-hosted cobalt media backend,
-# which the Worker calls over its public URL (COBALT_PUBLIC_URL) to resolve and
-# tunnel media. Deployed via Dokploy; Traefik routes the public hostname to it.
 services:
-  # Self-hosted cobalt instance — resolves + muxes the actual media file.
-  # Image is unmodified upstream (AGPL-3.0): https://github.com/imputnet/cobalt
-  cobalt:
-    image: ghcr.io/imputnet/cobalt:11
-    container_name: snatch-cobalt
-    init: true
-    read_only: true
+  app:
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    container_name: snatch-app
     restart: unless-stopped
+    ports:
+      - "${APP_PORT:-38700}:3001"
     environment:
-      # MUST equal the public URL the Worker reaches this instance at, or
-      # cobalt-generated tunnel links point at an unreachable host and break.
-      - API_URL=${COBALT_PUBLIC_URL:-https://cobalt.um1ng.me/}
-      # TikTok / X / Instagram (auth-gated) bot-block cobalt without cookies.
-      # To fetch them, drop a cookies.json beside this file and uncomment:
-      # - COOKIE_PATH=/cookies.json
-    # volumes:
-    #   - ./cookies.json:/cookies.json:ro
+      - PORT=3001
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
     networks:
-      # dokploy-network: reachable by Dokploy's Traefik (routes the public host).
       - dokploy-network
 
 networks:
