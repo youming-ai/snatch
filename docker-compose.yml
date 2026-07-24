@@ -1,5 +1,5 @@
 services:
-  snatch:
+  app:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
