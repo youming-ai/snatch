@@ -2,21 +2,13 @@ import { detectPlatform, type ResolveResponse, SERVICES } from "@snatch/shared";
 import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
 import { useCallback, useState } from "react";
 import { API_BASE_URL } from "../config";
+import { Sentry } from "../lib/sentry";
 import { DownloaderInput } from "./DownloaderInput";
-import { ErrorBoundary } from "./ErrorBoundary";
 import { DEFAULT_SETTINGS, SettingsDrawer, type SettingsState } from "./SettingsDrawer";
-
-export function DownloaderApp() {
-	return (
-		<ErrorBoundary>
-			<DownloaderAppInner />
-		</ErrorBoundary>
-	);
-}
 
 type PickerResponse = ResolveResponse;
 
-function DownloaderAppInner() {
+export function DownloaderApp() {
 	// Settings & Drawer
 	const [settings, setSettings] = useState<SettingsState>(() => {
 		try {
@@ -29,29 +21,28 @@ function DownloaderAppInner() {
 	const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
 	// Core State
-	const [url, setUrl] = useState("");
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [savedName, setSavedName] = useState<string | null>(null);
-
-	// Multi-Media Picker State
 	const [pickerResponse, setPickerResponse] = useState<PickerResponse | null>(null);
+	// Represents a completed resolution, not the editable form value.
+	const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
 	// Sync settings to localStorage
 	const handleSettingsChange = (nextSettings: SettingsState) => {
 		setSettings(nextSettings);
 		try {
 			localStorage.setItem("snatch_settings", JSON.stringify(nextSettings));
-		} catch (err) {
-			console.error("Failed to save settings:", err);
+		} catch (error) {
+			Sentry.captureException(error);
 		}
 	};
 
-	const handleUrlChange = (next: string) => {
-		setUrl(next);
+	const handleInputValueChange = () => {
 		if (error) setError(null);
 		if (savedName) setSavedName(null);
 		if (pickerResponse) setPickerResponse(null);
+		if (resolvedUrl) setResolvedUrl(null);
 	};
 
 	const triggerDownload = useCallback((downloadUrl: string) => {
@@ -63,8 +54,9 @@ function DownloaderAppInner() {
 		anchor.remove();
 	}, []);
 
-	const handleDownload = async () => {
-		if (!url?.trim()) {
+	const handleDownload = async (rawUrl: string) => {
+		const url = rawUrl.trim();
+		if (!url) {
 			setError("Please enter a valid URL");
 			return;
 		}
@@ -78,6 +70,7 @@ function DownloaderAppInner() {
 		setError(null);
 		setSavedName(null);
 		setPickerResponse(null);
+		setResolvedUrl(null);
 
 		const { apiKey, ...mediaOptions } = settings;
 
@@ -92,14 +85,20 @@ function DownloaderAppInner() {
 			const response = await fetch(`${API_BASE_URL}/api/resolve`, {
 				method: "POST",
 				headers,
-				body: JSON.stringify({
-					url: url.trim(),
-					...mediaOptions,
-				}),
+				body: JSON.stringify({ url, ...mediaOptions }),
 			});
 			const data = (await response.json().catch(() => ({}))) as
 				| ResolveResponse
 				| { success?: boolean; error?: string };
+
+			// Transport/HTTP-level failures (rate-limit 429, gateway 5xx, a body
+			// we couldn't parse). Surface the server's structured message when it
+			// sent one, otherwise derive from the status so the user isn't left
+			// looking at a silent no-op.
+			if (!response.ok) {
+				const serverError = "success" in data && typeof data.error === "string" ? data.error : null;
+				throw new Error(serverError || `Request failed (${response.status})`);
+			}
 
 			if ("success" in data) {
 				throw new Error(typeof data.error === "string" ? data.error : "Failed to resolve media");
@@ -115,10 +114,13 @@ function DownloaderAppInner() {
 
 			if (resolveData.status === "picker") {
 				setPickerResponse(resolveData);
+				setResolvedUrl(url);
 			}
-		} catch (err) {
-			console.error("Resolution error:", err);
-			setError(err instanceof Error ? err.message : "Failed to resolve content. Please try again.");
+		} catch (error) {
+			Sentry.captureException(error);
+			setError(
+				error instanceof Error ? error.message : "Failed to resolve content. Please try again.",
+			);
 		} finally {
 			setLoading(false);
 		}
@@ -175,9 +177,8 @@ function DownloaderAppInner() {
 					{/* Download Input */}
 					<div className="max-w-3xl mx-auto animate-in fade-in slide-in-from-bottom-8 duration-700 delay-300">
 						<DownloaderInput
-							url={url}
-							onUrlChange={handleUrlChange}
-							onDownload={() => handleDownload()}
+							onSubmit={handleDownload}
+							onValueChange={handleInputValueChange}
 							loading={loading}
 						/>
 					</div>
@@ -207,13 +208,17 @@ function DownloaderAppInner() {
 									<p className="text-sm font-medium text-green-300">Download started</p>
 									<p className="text-xs text-gray-400 truncate font-mono">{savedName}</p>
 								</div>
-								<button
-									type="button"
-									onClick={() => handleDownload()}
-									className="shrink-0 text-xs font-medium text-green-300 hover:text-green-200 underline underline-offset-2"
-								>
-									Again
-								</button>
+								{resolvedUrl && (
+									<button
+										type="button"
+										onClick={() => {
+											void handleDownload(resolvedUrl);
+										}}
+										className="shrink-0 text-xs font-medium text-green-300 hover:text-green-200 underline underline-offset-2"
+									>
+										Again
+									</button>
+								)}
 								<button
 									type="button"
 									aria-label="Dismiss"

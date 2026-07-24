@@ -1,12 +1,12 @@
 import tailwindcss from "@tailwindcss/vite";
+import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-// Pure React SPA. In dev, /api is proxied to the local API server so the app
-// talks to the same origin it will in production (where the API serves this
-// build's static files). No SSR, no framework runtime.
+// TanStack Start in SPA mode: no SSR runtime, prerenders a static shell + client
+// bundle that the all-in-one API serves from ./public and Cloudflare Pages hosts.
+// In dev, /api is proxied to the local API server for same-origin behavior.
 export default defineConfig({
-	plugins: [react(), tailwindcss()],
 	server: {
 		port: 5173,
 		proxy: {
@@ -16,8 +16,10 @@ export default defineConfig({
 			},
 		},
 	},
-	build: {
-		outDir: "dist",
-		emptyOutDir: true,
-	},
+	plugins: [
+		tanstackStart({ spa: { enabled: true, prerender: { outputPath: "/index" } } }),
+		// react's plugin must come after start's plugin
+		react(),
+		tailwindcss(),
+	],
 });

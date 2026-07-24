@@ -17,6 +17,22 @@ describe("API Routes", () => {
 			const data = (await res.json()) as { success: boolean; error: string };
 			expect(data.success).toBe(false);
 		});
+
+		it("should reject unsupported media options with 400", async () => {
+			const res = await app.fetch(
+				new Request("http://localhost:3001/api/resolve", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({
+						url: "https://x.com/user/status/1",
+						videoQuality: "not-a-quality",
+					}),
+				}),
+			);
+			expect(res.status).toBe(400);
+			const data = (await res.json()) as { success: boolean };
+			expect(data.success).toBe(false);
+		});
 	});
 
 	describe("GET /api/info", () => {

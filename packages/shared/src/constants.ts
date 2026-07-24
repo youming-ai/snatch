@@ -30,19 +30,16 @@ export const SERVICES = [
 
 export type SupportedPlatform = (typeof SERVICES)[number]["id"];
 
-export const PLATFORM_HOSTS = Object.fromEntries(
-	SERVICES.map((s) => [s.id, [...s.hosts]] as const),
-) as unknown as Record<SupportedPlatform, string[]>;
+export const PLATFORM_HOSTS = SERVICES.reduce(
+	(acc, s) => {
+		acc[s.id] = [...s.hosts];
+		return acc;
+	},
+	{} as Record<SupportedPlatform, string[]>,
+);
 
 export const ALLOWED_PLATFORM_DOMAINS = SERVICES.flatMap((s) => [...s.hosts]);
 
 // Real share URLs never contain whitespace. `new URL()` parsing + the host
 // allowlist do the actual security work; this just rejects malformed input.
 export const WHITESPACE_ONLY_REGEX = /\s/;
-
-export const NON_RETRYABLE_PATTERNS = [
-	"invalid url",
-	"unsupported platform",
-	"url contains",
-	"only http and https",
-];

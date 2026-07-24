@@ -7,6 +7,8 @@ interface ImportMetaEnv {
 	 * the API same-origin (dev uses Vite's `/api` proxy).
 	 */
 	readonly VITE_API_BASE_URL?: string;
+	/** Browser Sentry DSN; when unset, error reporting is disabled. */
+	readonly VITE_SENTRY_DSN?: string;
 }
 
 interface ImportMeta {

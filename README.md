@@ -1,6 +1,6 @@
 # Snatch
 
-Social media video downloader — Bun monorepo: a React + Vite SPA served by a Hono API powered by a native `yt-dlp` engine.
+Social media video downloader — Bun monorepo: a React + TanStack Start SPA served by a Hono API powered by a native `yt-dlp` engine.
 
 ## Supported Platforms
 
@@ -21,11 +21,11 @@ snatch/
 │   │   │   ├── routes/     # /health, /api/resolve, /api/download
 │   │   │   └── lib/        # ytdlp, security
 │   │   └── test/
-│   ├── web/                # React 19 + Vite SPA (static)
-│   │   ├── index.html      # Vite entry
+│   ├── web/                # React 19 + TanStack Start SPA (static client)
 │   │   ├── src/
+│   │   │   ├── routes/     # __root document shell and file-based routes
 │   │   │   ├── components/ # DownloaderApp, DownloaderInput, ErrorBoundary
-│   │   │   ├── main.tsx    # React root
+│   │   │   ├── router.tsx  # TanStack Router factory
 │   │   │   └── styles.css
 │   │   └── public/         # favicon, logos, manifest, robots.txt
 │   └── shared/             # Types, validation, constants (zero deps)
@@ -112,8 +112,8 @@ Host the static SPA on Cloudflare Pages and keep the API on Dokploy.
    `VITE_API_BASE_URL` to the public API origin (e.g. `https://api.snatch.example`).
    Then choose ONE deploy mechanism:
    - **Git integration (recommended, zero-secret):** Build command
-     `bun run build:cf`, Build output directory `packages/web/dist`, and leave
-     the **Deploy command empty**. Cloudflare publishes the output itself.
+     `bun run build:cf`, Build output directory `packages/web/dist/client`, and
+     leave the **Deploy command empty**. Cloudflare publishes the output itself.
    - **Wrangler deploy command:** Build command `bun run build:cf`, Deploy
      command `bun run deploy:cf`. This runs `wrangler pages deploy` and
      **requires** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the
