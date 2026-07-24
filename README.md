@@ -101,24 +101,22 @@ docker compose up -d --build
 
 On Dokploy: point the app's domain at the `app` service (port `3001`).
 
-### Split origin (Cloudflare Pages frontend + Dokploy API)
+### Split origin (Cloudflare Worker frontend + Dokploy API)
 
-Host the static SPA on Cloudflare Pages and keep the API on Dokploy.
+Host the static SPA on a Cloudflare Worker (Workers Static Assets) and keep the
+API on Dokploy. The yt-dlp engine cannot run on Workers, so the Worker serves
+only the built client; all `/api/*` calls go to the Dokploy origin.
 
 1. **API (Dokploy)** — deploy the Docker image as above and set
-   `ALLOWED_ORIGINS` to the Pages origin (e.g. `https://snatch.pages.dev`) so
-   the browser may call `/api/resolve` cross-origin.
-2. **Frontend (Cloudflare Pages)** — connect the repo and set the build env
-   `VITE_API_BASE_URL` to the public API origin (e.g. `https://api.snatch.example`).
-   Then choose ONE deploy mechanism:
-   - **Git integration (recommended, zero-secret):** Build command
-     `bun run build:cf`, Build output directory `packages/web/dist/client`, and
-     leave the **Deploy command empty**. Cloudflare publishes the output itself.
-   - **Wrangler deploy command:** Build command `bun run build:cf`, Deploy
-     command `bun run deploy:cf`. This runs `wrangler pages deploy` and
-     **requires** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the
-     build env, plus a Pages project named `snatch` (adjust `--project-name`
-     in the script otherwise).
+   `ALLOWED_ORIGINS` to the Worker origin (e.g. `https://snatch.<account>.workers.dev`)
+   so the browser may call `/api/resolve` cross-origin.
+2. **Frontend (Cloudflare Worker)** — `wrangler.jsonc` (repo root) configures an
+   assets-only Worker serving `packages/web/dist/client` with SPA fallback. In the
+   Cloudflare Worker build settings:
+   - Build command: `bun run build:cf`
+   - Deploy command: `bun run deploy:cf` (runs `wrangler deploy`)
+   - Build env `VITE_API_BASE_URL` = the public API origin (e.g. `https://api.snatch.example`)
+   - The deploy token needs **Account → Workers Scripts → Edit** (plus `CLOUDFLARE_ACCOUNT_ID`)
 
 Downloads stream directly from the API origin via `Content-Disposition`, so
 only `/api/resolve` needs CORS.
