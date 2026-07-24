@@ -1,11 +1,11 @@
 services:
-  app:
+  snatch:
     build:
       context: .
       dockerfile: packages/api/Dockerfile
       args:
         VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
-    container_name: snatch-app
+    container_name: snatch
     restart: unless-stopped
     ports:
       - "${APP_PORT:-38700}:3001"
