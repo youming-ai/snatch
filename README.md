@@ -83,14 +83,45 @@ bun run lint             # lint only
 bun run format           # format only
 ```
 
-## Docker
+## Deployment
+
+Two supported topologies.
+
+### All-in-one (Docker / Dokploy) — recommended
+
+The API serves the built SPA and `/api/*` on one origin. This is the only tier
+that runs the yt-dlp engine (it needs `child_process` + a filesystem, so it
+cannot run on Cloudflare Workers/Pages).
 
 ```bash
 cp .env.example .env
 docker compose up -d --build
-
 # App (UI + API) -> http://localhost:38700
 ```
+
+On Dokploy: point the app's domain at the `app` service (port `3001`).
+
+### Split origin (Cloudflare Pages frontend + Dokploy API)
+
+Host the static SPA on Cloudflare Pages and keep the API on Dokploy.
+
+1. **API (Dokploy)** — deploy the Docker image as above and set
+   `ALLOWED_ORIGINS` to the Pages origin (e.g. `https://snatch.pages.dev`) so
+   the browser may call `/api/resolve` cross-origin.
+2. **Frontend (Cloudflare Pages)** — connect the repo and set the build env
+   `VITE_API_BASE_URL` to the public API origin (e.g. `https://api.snatch.example`).
+   Then choose ONE deploy mechanism:
+   - **Git integration (recommended, zero-secret):** Build command
+     `bun run build:cf`, Build output directory `packages/web/dist`, and leave
+     the **Deploy command empty**. Cloudflare publishes the output itself.
+   - **Wrangler deploy command:** Build command `bun run build:cf`, Deploy
+     command `bun run deploy:cf`. This runs `wrangler pages deploy` and
+     **requires** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the
+     build env, plus a Pages project named `snatch` (adjust `--project-name`
+     in the script otherwise).
+
+Downloads stream directly from the API origin via `Content-Disposition`, so
+only `/api/resolve` needs CORS.
 
 ## API Endpoints
 

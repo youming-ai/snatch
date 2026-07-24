@@ -11,6 +11,8 @@
 		"build": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build && bun --filter '@snatch/web' build",
 		"build:api": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/api' build",
 		"build:web": "bun --filter '@snatch/web' build",
+		"build:cf": "bun --filter '@snatch/shared' typecheck && bun --filter '@snatch/web' build",
+		"deploy:cf": "bunx wrangler@4 pages deploy packages/web/dist --project-name=snatch",
 		"preview": "bun --filter '@snatch/web' preview",
 		"test": "bun --filter '*' test",
 		"test:shared": "bun --filter '@snatch/shared' test",

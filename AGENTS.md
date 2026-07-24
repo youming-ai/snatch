@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-Bun monorepo (3 workspace packages): React 19 + Vite SPA served as static files by a Hono API that resolves and processes media using a built-in `yt-dlp` engine. Single public origin.
+Bun monorepo (3 workspace packages): React 19 + Vite SPA and a Hono API that resolves and processes media using a built-in `yt-dlp` engine. Deploys two ways: all-in-one (API serves the SPA, single origin) or split (SPA on Cloudflare Pages, API on Dokploy).
 
 ## Package Boundaries
 
@@ -15,12 +15,14 @@ Cross-package import rule: every consumer imports from the `@snatch/shared` **ba
 ## Architecture & Data Flow
 
 ```
-Browser ─ GET /              → API serves built SPA from ./public
-Browser ─ POST /api/resolve  → API: validateUrl → rateLimit → probe via yt-dlp → return formats
-Browser ─ GET /api/download → API: verifyUrl → executeDownload via yt-dlp → stream bytes
+All-in-one:  Browser ─ GET /            → API serves built SPA from ./public
+Split:       Browser ─ GET /            → Cloudflare Pages serves the SPA
+Both:        Browser ─ POST /api/resolve → API: validateUrl → rateLimit → probe via yt-dlp → signed choices
+             Browser ─ GET  /api/download → API: verifyUrl → executeDownload via yt-dlp → stream bytes
 ```
 
-- **Single origin**: Hono serves the built SPA (`packages/web/dist` copied to `./public` in the Docker image) and `/api/*` on one port. In dev, Vite (`:5173`) serves the UI and proxies `/api` to the API (`:3001`).
+- **Two topologies**: (1) *All-in-one* — Hono serves the built SPA (`packages/web/dist` copied to `./public`) and `/api/*` on one port (the Docker image; `STATIC_ROOT`). (2) *Split* — the SPA is hosted on Cloudflare Pages and calls the API cross-origin; the API runs on Dokploy and serves `/api/*` only. In dev, Vite (`:5173`) serves the UI and proxies `/api` to the API (`:3001`).
+- **API base**: the SPA calls `${VITE_API_BASE_URL}/api/...` (`packages/web/src/config.ts`). Empty (all-in-one / dev) means same-origin. Signed `/api/download` URLs are absolute to the API origin (`new URL(c.req.url).origin`), so cross-origin downloads work via a plain `<a download>` (filename from `Content-Disposition`; no CORS needed). Only `POST /api/resolve` is a cross-origin `fetch`, gated by `ALLOWED_ORIGINS` CORS.
 - **yt-dlp engine**: API uses `ensureYtDlp()` (`packages/api/src/lib/ytdlp.ts`) to resolve or download the standalone `yt-dlp` binary on demand. yt-dlp uses the `ffmpeg` binary available on the system PATH for merging and extraction.
 - **Environment loading**: web reads build-time env via `import.meta.env`; browser-exposed vars MUST use Vite's `VITE_` prefix. API reads `process.env`.
 - **Rate limit**: ignores generic `x-forwarded-for`; uses `cf-connecting-ip` / `fly-client-ip` from a trusted proxy, falls back to hashed user-agent. See `packages/api/src/middleware/rate-limit.ts`.
@@ -109,11 +111,12 @@ bun docker:down    # docker compose down
 |---|---|---|---|
 | `APP_PORT` | docker-compose | `38700` | Host port for `app` |
 | `PORT` | API | `3001` | Container listen port |
-| `ALLOWED_ORIGINS` | API | `""` (reject all) | Comma-separated CORS allowlist for `/api/*`. Same-origin SPA needs none. |
+| `ALLOWED_ORIGINS` | API | `""` (reject all) | Comma-separated CORS allowlist for `/api/*`. All-in-one needs none; **split** must include the Pages origin. |
 | `API_RATE_LIMIT_MAX` | API | `30` | Max requests per window |
 | `API_RATE_LIMIT_WINDOW` | API | `60000` (ms) | Rate window |
 | `STATIC_ROOT` | API | `./public` | Override the SPA static dir |
 | `VITE_API_TARGET` | web (dev) | `http://localhost:3001` | Vite dev proxy target for `/api` |
+| `VITE_API_BASE_URL` | web (build) | `""` (same-origin) | **Split** only: absolute API origin baked into the SPA (set in the Pages build env). |
 | `PROXY_SIGNING_KEY` | API | `""` (random) | HMAC key to sign media URLs to prevent SSRF/tampering. If empty, a random key is generated at startup. |
 | `YTDLP_DIR` | API | `~/.snatch/bin` | Directory the standalone `yt-dlp` binary is cached in / downloaded to. |
 

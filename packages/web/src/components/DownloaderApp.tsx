@@ -1,6 +1,7 @@
 import { detectPlatform, type ResolveResponse, SERVICES } from "@snatch/shared";
 import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
 import { useCallback, useState } from "react";
+import { API_BASE_URL } from "../config";
 import { DownloaderInput } from "./DownloaderInput";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { DEFAULT_SETTINGS, SettingsDrawer, type SettingsState } from "./SettingsDrawer";
@@ -88,7 +89,7 @@ function DownloaderAppInner() {
 		}
 
 		try {
-			const response = await fetch("/api/resolve", {
+			const response = await fetch(`${API_BASE_URL}/api/resolve`, {
 				method: "POST",
 				headers,
 				body: JSON.stringify({
