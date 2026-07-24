@@ -12,7 +12,14 @@ import {
 import { type Context, Hono } from "hono";
 import { stream } from "hono/streaming";
 import { sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
-import { buildChoices, ensureYtDlp, executeDownload, probe, type VideoInfo } from "../lib/ytdlp";
+import {
+	buildChoices,
+	ensureYtDlp,
+	executeDownload,
+	parseVideoInfo,
+	probe,
+	type VideoInfo,
+} from "../lib/ytdlp";
 
 const downloadRouter = new Hono();
 
@@ -166,7 +173,7 @@ downloadRouter.get("/api/download", async (c) => {
 	const videoQuality = c.req.query("videoQuality") ?? "";
 	const downloadMode = c.req.query("downloadMode") ?? "";
 
-	if (!url || !choiceId || infoJsonPath === undefined || !signature) {
+	if (!url || !choiceId || !infoJsonPath || !signature) {
 		return c.json({ success: false, error: "Missing required download parameters" }, 400);
 	}
 
@@ -196,21 +203,13 @@ downloadRouter.get("/api/download", async (c) => {
 	try {
 		const ytdlp = await ensureYtDlp(c.req.raw.signal);
 
-		let infoJsonToUse: string | undefined;
+		// The signed URL always carries an info-json path; reuse it, falling
+		// back to a fresh probe only if the cached file is gone or unreadable.
 		let info: VideoInfo | undefined;
-
-		if (infoJsonPath) {
-			try {
-				const rawJson = await fs.readFile(infoJsonPath, "utf-8");
-				info = JSON.parse(rawJson) as VideoInfo;
-				infoJsonToUse = infoJsonPath;
-			} catch {
-				infoJsonToUse = undefined;
-				info = undefined;
-			}
-		}
-
-		if (!info) {
+		let infoJsonToUse = infoJsonPath;
+		try {
+			info = parseVideoInfo(await fs.readFile(infoJsonPath, "utf-8"));
+		} catch {
 			const probed = await probe(ytdlp, url, c.req.raw.signal);
 			info = probed.info;
 			infoJsonToUse = probed.infoJsonPath;

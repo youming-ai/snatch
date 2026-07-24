@@ -10,8 +10,13 @@ services:
     environment:
       - PORT=3001
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
+    volumes:
+      - ytdlp-cache:/data
     networks:
       - dokploy-network
+
+volumes:
+  ytdlp-cache:
 
 networks:
   dokploy-network:

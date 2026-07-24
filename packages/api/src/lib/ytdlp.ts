@@ -116,6 +116,38 @@ export interface VideoInfo {
 	formats?: RawFormat[];
 }
 
+function isRawFormat(value: unknown): value is RawFormat {
+	return (
+		typeof value === "object" &&
+		value !== null &&
+		typeof (value as RawFormat).format_id === "string"
+	);
+}
+
+/** Parse and shape-validate untrusted yt-dlp JSON into a VideoInfo. */
+export function parseVideoInfo(raw: string): VideoInfo {
+	let data: unknown;
+	try {
+		data = JSON.parse(raw);
+	} catch {
+		throw new Error("Could not parse video metadata from yt-dlp.");
+	}
+	if (typeof data !== "object" || data === null) {
+		throw new Error("Unexpected video metadata shape from yt-dlp.");
+	}
+	const obj = data as Record<string, unknown>;
+	return {
+		id: typeof obj.id === "string" ? obj.id : "",
+		title: typeof obj.title === "string" ? obj.title : "",
+		uploader: typeof obj.uploader === "string" ? obj.uploader : undefined,
+		duration: typeof obj.duration === "number" ? obj.duration : undefined,
+		thumbnail: typeof obj.thumbnail === "string" ? obj.thumbnail : undefined,
+		webpage_url: typeof obj.webpage_url === "string" ? obj.webpage_url : undefined,
+		extractor_key: typeof obj.extractor_key === "string" ? obj.extractor_key : undefined,
+		formats: Array.isArray(obj.formats) ? obj.formats.filter(isRawFormat) : undefined,
+	};
+}
+
 interface ProbeResult {
 	info: VideoInfo;
 	infoJsonPath: string;
@@ -164,12 +196,7 @@ export async function probe(
 	});
 
 	const stdout = await promise;
-	let info: VideoInfo;
-	try {
-		info = JSON.parse(stdout) as VideoInfo;
-	} catch {
-		throw new Error("Could not parse video metadata from yt-dlp.");
-	}
+	const info = parseVideoInfo(stdout);
 
 	const tmpDir = os.tmpdir();
 	await reapStaleInfoJson(tmpDir);
@@ -270,21 +297,18 @@ function scoreVideo(f: RawFormat): number {
 	return score;
 }
 
-export interface ExecuteDownloadOptions {
+interface ExecuteDownloadOptions {
 	ytdlp: string;
 	url: string;
 	infoJsonPath?: string;
 	args: string[];
-	/** Directory for the downloaded file; defaults to the OS temp dir. */
-	outDir?: string;
 }
 
 export async function executeDownload(
 	opts: ExecuteDownloadOptions,
 	signal?: AbortSignal,
 ): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
-	const outDir = opts.outDir ?? os.tmpdir();
-	const outPattern = path.join(outDir, `snatch-${Date.now()}-%(title).60s.%(ext)s`);
+	const outPattern = path.join(os.tmpdir(), `snatch-${Date.now()}-%(title).60s.%(ext)s`);
 	const args = [
 		...(opts.infoJsonPath ? ["--load-info-json", opts.infoJsonPath] : [opts.url]),
 		...opts.args,

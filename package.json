@@ -21,7 +21,6 @@
 		"lint:fix": "biome check --fix .",
 		"format": "biome format --write .",
 		"check": "biome check --fix .",
-		"deploy:cf": "echo 'Cloudflare Workers deployment removed. Deploy via Docker/Dokploy instead.'",
 		"docker:up": "docker compose up -d --build",
 		"docker:down": "docker compose down",
 		"prepare": "husky"
