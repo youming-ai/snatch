@@ -146,7 +146,18 @@ export function DownloaderApp() {
 			const source = new EventSource(`${API_BASE_URL}${item.url}`);
 			activeSourceRef.current = source;
 
+			// A stream that has been replaced is still able to deliver an event that
+			// was already queued when it was closed. Acting on one would abort the
+			// new download and overwrite its state, so every handler first asks
+			// whether it is still the live stream.
+			const isActive = () => activeSourceRef.current === source;
+			const finish = () => {
+				source.close();
+				if (isActive()) activeSourceRef.current = null;
+			};
+
 			source.addEventListener("progress", (event) => {
+				if (!isActive()) return;
 				try {
 					const data = JSON.parse(event.data) as DownloadProgress;
 					setDownloadPhase((prev) =>
@@ -159,13 +170,15 @@ export function DownloaderApp() {
 			});
 
 			source.addEventListener("processing", () => {
+				if (!isActive()) return;
 				setDownloadPhase((prev) =>
 					prev.status === "downloading" ? { ...prev, processing: true } : prev,
 				);
 			});
 
 			source.addEventListener("ready", (event) => {
-				closeStream();
+				if (!isActive()) return;
+				finish();
 				try {
 					const data = JSON.parse(event.data) as {
 						downloadUrl: string;
@@ -182,7 +195,8 @@ export function DownloaderApp() {
 			});
 
 			source.addEventListener("failed", (event) => {
-				closeStream();
+				if (!isActive()) return;
+				finish();
 				try {
 					const data = JSON.parse((event as MessageEvent).data ?? "{}") as { message?: string };
 					setDownloadPhase({ status: "error", message: data.message ?? "Download failed." });
@@ -193,7 +207,8 @@ export function DownloaderApp() {
 			});
 
 			source.onerror = () => {
-				closeStream();
+				if (!isActive()) return;
+				finish();
 				setDownloadPhase((prev) =>
 					prev.status === "downloading"
 						? { status: "error", message: "Connection to download progress stream lost." }

@@ -79,10 +79,16 @@ function getClientId(
 	return simpleHash(`fallback:${userAgent}`);
 }
 
-/** A non-positive or unparseable value must not silently disable the limit. */
+/**
+ * A non-positive or malformed value must not silently change the limit, so the
+ * whole string has to be digits: `Number.parseInt` would read "30oops" as 30 and
+ * quietly apply a number the operator never wrote.
+ */
 function readPositiveInt(value: string | undefined, fallback: number): number {
-	const parsed = Number.parseInt(value ?? "", 10);
-	return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+	const trimmed = value?.trim() ?? "";
+	if (!/^\d+$/.test(trimmed)) return fallback;
+	const parsed = Number.parseInt(trimmed, 10);
+	return parsed > 0 ? parsed : fallback;
 }
 
 export function rateLimit(options?: Partial<RateLimitOptions>): MiddlewareHandler {

@@ -131,6 +131,21 @@ describe("GET /api/download delivery", () => {
 		expect(res.status).toBe(206);
 		expect(res.headers.get("Content-Range")).toBe("bytes 7-9/10");
 		expect(await res.text()).toBe("789");
+		// It ends at EOF but never delivered bytes 0-6, so deleting here would 404
+		// the very request that range was serving.
+		expect(await exists(file)).toBe(true);
+	});
+
+	it("reclaims the file after a range that covers it from byte 0", async () => {
+		const file = await preparedFile("video.mp4");
+
+		const res = await app.fetch(new Request(downloadUrl(file), { headers: { Range: "bytes=0-" } }));
+
+		expect(res.status).toBe(206);
+		expect(res.headers.get("Content-Range")).toBe("bytes 0-9/10");
+		expect(await res.text()).toBe("0123456789");
+		// Byte 0 to EOF is the whole file, so this is a complete delivery.
+		expect(await waitForRemoval(file)).toBe(true);
 	});
 
 	it("refuses a range past the end with 416 and the file size", async () => {

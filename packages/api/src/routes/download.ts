@@ -89,7 +89,7 @@ downloadRouter.post("/api/resolve", async (c) => {
 	const { url } = parsed.data;
 
 	try {
-		const ytdlp = await ensureYtDlp(c.req.raw.signal);
+		const ytdlp = await ensureYtDlp();
 		const { info, infoJsonPath } = await probe(ytdlp, url, c.req.raw.signal);
 		const choices = buildChoices(info);
 		const origin = new URL(c.req.url).origin;
@@ -176,7 +176,7 @@ downloadRouter.get("/api/download/progress", async (c) => {
 		};
 
 		try {
-			const ytdlp = await ensureYtDlp(c.req.raw.signal);
+			const ytdlp = await ensureYtDlp();
 
 			let info: VideoInfo | undefined;
 			let infoJsonToUse = infoJsonPath;
@@ -305,8 +305,11 @@ downloadRouter.get("/api/download", async (c) => {
 	const start = range?.start ?? 0;
 	const end = range?.end ?? stat.size - 1;
 	const length = Math.max(0, end - start + 1);
-	// Only a request that reaches EOF leaves nothing behind for a resume.
-	const reachesEof = end === stat.size - 1;
+	// Only a response that carried the file from byte 0 to EOF proves the client
+	// has it. A suffix or resumed range also finishes at EOF while leaving the
+	// earlier bytes undelivered, so EOF alone is not enough: deleting there would
+	// 404 the very retry that range was resuming.
+	const deliveredWholeFile = start === 0 && end === stat.size - 1;
 
 	c.header("Accept-Ranges", "bytes");
 	c.header("Content-Type", contentTypeFor(path.extname(filePath) === ".mp3" ? "audio" : "video"));
@@ -320,7 +323,11 @@ downloadRouter.get("/api/download", async (c) => {
 		c.header("Content-Range", `bytes ${start}-${end}/${stat.size}`);
 	}
 
-	const readStream = createReadStream(filePath, { start, end });
+	// No explicit bounds for an ordinary request: on an empty file the computed
+	// range would be `end: -1`, which the stream rejects outright.
+	const readStream = range
+		? createReadStream(filePath, { start, end })
+		: createReadStream(filePath);
 	return stream(c, async (s) => {
 		try {
 			for await (const chunk of readStream) {
@@ -330,11 +337,13 @@ downloadRouter.get("/api/download", async (c) => {
 			}
 		} finally {
 			readStream.destroy();
-			// Delete once the file has been delivered to EOF. A transfer the
-			// client abandoned keeps it, so the browser can resume it through
-			// the Range the signature already covers; the temp sweeper is what
-			// ultimately reclaims that case.
-			if (reachesEof && !s.aborted) await removePreparedFile(filePath);
+			// Reclaim the file only after a complete delivery to a client that is
+			// still there. `readableEnded` rules out a transfer that died
+			// mid-stream, which has to stay on disk for the retry it invites;
+			// anything genuinely abandoned is left to the temp sweeper.
+			if (deliveredWholeFile && !s.aborted && readStream.readableEnded) {
+				await removePreparedFile(filePath);
+			}
 		}
 	});
 });

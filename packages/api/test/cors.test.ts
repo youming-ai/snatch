@@ -34,7 +34,9 @@ describe("CORS configuration", () => {
 	});
 
 	it("names no origin when the request carries none", async () => {
-		setAllowedOrigins(undefined);
+		// A non-empty allowlist, or the test would pass against the very bug it
+		// guards: answering a headerless request with the first allowlisted entry.
+		setAllowedOrigins("https://snatch.example, https://other.example");
 		expect((await request()).headers.get("Access-Control-Allow-Origin")).toBeNull();
 	});
 

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { cleanupStaleFiles, DEFAULT_GRACE_MS } from "../src/lib/tmp-cleanup";
+import { cleanupStaleFiles, DEFAULT_GRACE_MS, markTmpInUse } from "../src/lib/tmp-cleanup";
 
 let dir: string;
 
@@ -81,6 +81,23 @@ describe("cleanupStaleFiles", () => {
 		expect(removed).toBe(1);
 		expect(await exists(inflight)).toBe(true);
 		expect(await exists(idle)).toBe(false);
+	});
+
+	it("leaves a live job's files alone, however old they look", async () => {
+		// The first stream of a two-stream download stops being touched while the
+		// second one downloads, so age alone cannot tell it from abandoned debris.
+		const firstFragment = await writeFile("snatch-job-7-video.f137.mp4", 10, 3 * 60 * 60 * 1000);
+		const release = markTmpInUse("snatch-job-7-");
+		try {
+			expect(await cleanupStaleFiles({ dir, ttlMs: 60 * 60 * 1000 })).toBe(0);
+			expect(await exists(firstFragment)).toBe(true);
+		} finally {
+			release();
+		}
+
+		// Once the job has released the prefix the same file is fair game again.
+		expect(await cleanupStaleFiles({ dir, ttlMs: 60 * 60 * 1000 })).toBe(1);
+		expect(await exists(firstFragment)).toBe(false);
 	});
 
 	it("returns 0 when the directory is unreadable", async () => {

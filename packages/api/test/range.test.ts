@@ -42,7 +42,11 @@ describe("parseRange", () => {
 		expect(parseRange("bytes=-", 100)).toBeNull();
 	});
 
-	it("rejects a bound that is not a finite integer", () => {
-		expect(parseRange(`bytes=0-${"9".repeat(400)}`, 100)).toBe("unsatisfiable");
+	it("clamps a bound too large for a JS number instead of rejecting it", () => {
+		// RFC 9110 treats an end past the last byte as the rest of the file, and an
+		// overflowing one means exactly the same thing — 416 would be wrong.
+		const huge = "9".repeat(400);
+		expect(parseRange(`bytes=0-${huge}`, 100)).toEqual({ start: 0, end: 99 });
+		expect(parseRange(`bytes=-${huge}`, 100)).toEqual({ start: 0, end: 99 });
 	});
 });

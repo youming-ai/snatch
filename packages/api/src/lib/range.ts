@@ -31,17 +31,25 @@ export function parseRange(
 	let start: number;
 	let end: number;
 	if (rawStart === "") {
-		// Suffix form: the final N bytes.
+		// Suffix form: the final N bytes, or the whole file when N is larger than
+		// it — a suffix length too big for a JS number lands here too, which is
+		// "at least the file size" by definition rather than an impossibility.
 		const suffixLength = Number(rawEnd);
-		if (!Number.isInteger(suffixLength) || suffixLength <= 0) return "unsatisfiable";
-		start = Math.max(0, size - suffixLength);
+		if (Number.isNaN(suffixLength) || suffixLength <= 0) return "unsatisfiable";
+		start = Number.isFinite(suffixLength) ? Math.max(0, size - Math.floor(suffixLength)) : 0;
 		end = size - 1;
 	} else {
 		start = Number(rawStart);
-		end = rawEnd === "" ? size - 1 : Number(rawEnd);
+		if (!Number.isInteger(start) || start >= size) return "unsatisfiable";
+
+		// RFC 9110: an end past the last byte is the remainder of the file, not a
+		// rejection, and an overflowed one means the same thing.
+		const requestedEnd = rawEnd === "" ? size - 1 : Number(rawEnd);
+		if (Number.isNaN(requestedEnd)) return "unsatisfiable";
+		const clampedEnd = Number.isFinite(requestedEnd) ? Math.floor(requestedEnd) : size - 1;
+		end = Math.min(clampedEnd, size - 1);
 	}
 
-	if (!Number.isInteger(start) || !Number.isInteger(end)) return "unsatisfiable";
-	if (start > end || start >= size) return "unsatisfiable";
-	return { start, end: Math.min(end, size - 1) };
+	if (start > end) return "unsatisfiable";
+	return { start, end };
 }

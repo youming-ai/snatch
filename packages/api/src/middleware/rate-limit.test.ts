@@ -111,4 +111,17 @@ describe("rateLimit middleware", () => {
 			else process.env.API_RATE_LIMIT_MAX = prevMax;
 		}
 	});
+
+	it("ignores a numeric prefix followed by junk", async () => {
+		// parseInt would read "999oops" as 999 and apply a limit nobody wrote.
+		const prevMax = process.env.API_RATE_LIMIT_MAX;
+		process.env.API_RATE_LIMIT_MAX = "999oops";
+		try {
+			const res = await fetchTest(createEnvApp(), { "user-agent": "ua-junk" });
+			expect(res.headers.get("X-RateLimit-Limit")).toBe("30");
+		} finally {
+			if (prevMax === undefined) delete process.env.API_RATE_LIMIT_MAX;
+			else process.env.API_RATE_LIMIT_MAX = prevMax;
+		}
+	});
 });

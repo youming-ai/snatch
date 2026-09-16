@@ -1,17 +1,19 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { createWriteStream, statSync } from "node:fs";
+import { accessSync, constants, createWriteStream, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
-import { TMP_PREFIX } from "./tmp-cleanup";
+import { markTmpInUse, TMP_PREFIX } from "./tmp-cleanup";
 
 const SNATCH_DIR = process.env.YTDLP_DIR || path.join(os.homedir(), ".snatch", "bin");
 const RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
+/** A provisioning attempt that stalls this long is abandoned for the next retry. */
+const PROVISION_TIMEOUT_MS = 120_000;
 
 // Shares the sweeper's prefix so probe metadata is always coverable by
 // `cleanupStaleFiles`, even if the request that wrote it never cleans up.
@@ -73,7 +75,13 @@ export function usableCookiesFile(): string | null {
 	const configured = process.env.YTDLP_COOKIES_FILE?.trim();
 	if (!configured) return null;
 	try {
-		return statSync(configured).isFile() ? configured : null;
+		if (!statSync(configured).isFile()) return null;
+		// Readability matters as much as existence: a jar the service account
+		// cannot open would be handed to every child, and each authenticated
+		// probe would fail with yt-dlp's error instead of the boot warning that
+		// says the configuration is wrong.
+		accessSync(configured, constants.R_OK);
+		return configured;
 	} catch {
 		return null;
 	}
@@ -113,8 +121,10 @@ let provisioning: Promise<string> | null = null;
  * The release is deliberately unpinned: yt-dlp ships extractor fixes constantly
  * and a pinned build rots as sites change. Operators who want a fixed binary put
  * it on `PATH` or in `YTDLP_DIR`, both of which are preferred over downloading.
+ *
+ * Takes no signal on purpose — see the note on the shared attempt below.
  */
-export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
+export async function ensureYtDlp(): Promise<string> {
 	if (await commandWorks("yt-dlp", ["--version"])) return "yt-dlp";
 
 	const local = path.join(SNATCH_DIR, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
@@ -123,7 +133,12 @@ export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
 	// One provision at a time. Concurrent callers await the same attempt instead
 	// of racing to write the same temp file, and a failure clears the slot so a
 	// later request can retry rather than inheriting the first one's bad luck.
-	provisioning ??= provisionYtDlp(local, signal).finally(() => {
+	//
+	// The attempt is deliberately not cancellable by whoever triggered it: it is
+	// shared process-wide, so binding it to one caller's signal would let a
+	// client that closed its tab fail provisioning for every other waiter. It
+	// carries its own deadline instead.
+	provisioning ??= provisionYtDlp(local, AbortSignal.timeout(PROVISION_TIMEOUT_MS)).finally(() => {
 		provisioning = null;
 	});
 	return provisioning;
@@ -401,6 +416,15 @@ const PROGRESS_TEMPLATE = `${PROGRESS_PREFIX}%(progress.downloaded_bytes)s|%(pro
 const DOWNLOAD_IDLE_TIMEOUT_MS = 120_000;
 
 /**
+ * Budget for the merge / audio-extraction step, which is silent by nature.
+ *
+ * yt-dlp does not forward ffmpeg's progress, so a large merge would look exactly
+ * like a dead connection. It is not unbounded either: a wedged ffmpeg must not
+ * hold a child forever.
+ */
+const POST_PROCESS_TIMEOUT_MS = 30 * 60 * 1000;
+
+/**
  * Stream yt-dlp download events and return the final file path. Mirrors yoinks'
  * progress parsing: live bytes/speed/ETA while downloading, processing events
  * during merge/audio extraction, and the resolved filepath once complete.
@@ -416,6 +440,10 @@ export async function* downloadWithProgress(
 		outDir,
 		`${TMP_PREFIX}${Date.now()}-${uniqueSuffix()}-%(title).60s.%(ext)s`,
 	);
+	// Everything this job writes shares this prefix — the final file and the
+	// per-stream fragments whose names yt-dlp chooses on its own — so the sweeper
+	// leaves all of it alone until the job is done with it.
+	const releaseOutput = markTmpInUse(path.basename(outPattern).split("%")[0] ?? TMP_PREFIX);
 	const args = [
 		...(opts.infoJsonPath ? ["--load-info-json", opts.infoJsonPath] : [opts.url]),
 		...cookiesArgs(),
@@ -443,6 +471,7 @@ export async function* downloadWithProgress(
 	let filepath = "";
 	let completed = false;
 	let timedOut = false;
+	let postProcessing = false;
 	let part = 0;
 	let totalParts = 1;
 	let lastDownloaded = 0;
@@ -451,12 +480,25 @@ export async function* downloadWithProgress(
 
 	// Any output resets the stall clock, so only a genuinely silent child is killed.
 	const idleTimeoutMs = opts.idleTimeoutMs ?? DOWNLOAD_IDLE_TIMEOUT_MS;
-	const idleTimer = setTimeout(() => {
-		timedOut = true;
-		child.kill("SIGTERM");
-	}, idleTimeoutMs);
-	idleTimer.unref();
-	const touchIdle = () => idleTimer.refresh();
+	let stalledAfterMs = idleTimeoutMs;
+	let idleTimer: ReturnType<typeof setTimeout> | undefined;
+
+	const armIdle = (ms: number) => {
+		stalledAfterMs = ms;
+		clearTimeout(idleTimer);
+		idleTimer = setTimeout(() => {
+			timedOut = true;
+			child.kill("SIGTERM");
+		}, ms);
+		idleTimer.unref();
+	};
+	armIdle(idleTimeoutMs);
+
+	// Output means the transfer is alive. Once yt-dlp has handed the file over to
+	// ffmpeg it stops printing progress — the postprocessor's own output is not
+	// forwarded — so that phase gets its own, far larger budget rather than the
+	// "no bytes for two minutes" one, which would kill a legitimate merge.
+	const touchIdle = () => armIdle(postProcessing ? POST_PROCESS_TIMEOUT_MS : idleTimeoutMs);
 
 	const eventQueue: DownloadEvent[] = [];
 	let eventResolver: ((value?: unknown) => void) | undefined;
@@ -498,6 +540,9 @@ export async function* downloadWithProgress(
 				const extracting = /^\[ExtractAudio\] Destination: (.+)$/.exec(line)?.[1];
 				const target = merging ?? extracting;
 				if (target) destinations.push(target);
+				// From here the child is waiting on ffmpeg, not on the network.
+				postProcessing = true;
+				armIdle(POST_PROCESS_TIMEOUT_MS);
 				pushEvent({ kind: "processing" });
 			} else if (line.startsWith("[download] Destination: ")) {
 				destinations.push(line.slice("[download] Destination: ".length));
@@ -525,7 +570,15 @@ export async function* downloadWithProgress(
 		}
 		if (timedOut) {
 			void removeFiles(destinations);
-			reject(new Error(`Download stalled: no output for ${Math.round(idleTimeoutMs / 1000)}s.`));
+			reject(
+				new Error(
+					postProcessing
+						? `Post-processing (merge or audio extraction) did not finish within ${Math.round(
+								stalledAfterMs / 60_000,
+							)}min.`
+						: `Download stalled: no output for ${Math.round(stalledAfterMs / 1000)}s.`,
+				),
+			);
 			return;
 		}
 		if (code === 0 && filepath) {
@@ -568,6 +621,7 @@ export async function* downloadWithProgress(
 		return await promise;
 	} finally {
 		clearTimeout(idleTimer);
+		releaseOutput();
 		// only kill+clean if the consumer abandoned the generator early
 		if (!completed && !child.killed) {
 			child.kill("SIGTERM");

@@ -40,6 +40,33 @@ async function remove(file: string): Promise<boolean> {
 }
 
 /**
+ * Filename prefixes owned by an in-flight job.
+ *
+ * The sweeper is offline and can only see mtimes, so it cannot tell a fragment a
+ * running yt-dlp is about to merge from one that was abandoned: the first stream
+ * of a two-stream download stops being touched while the second one downloads, so
+ * a job that runs long enough would have its finished half deleted before the
+ * merge. Registering the job's output prefix keeps the sweeper off everything that
+ * job will still need, including the fragments whose names it never sees.
+ */
+const inUsePrefixes = new Set<string>();
+
+/** Mark a filename prefix as belonging to a live job. Returns the release. */
+export function markTmpInUse(prefix: string): () => void {
+	inUsePrefixes.add(prefix);
+	return () => {
+		inUsePrefixes.delete(prefix);
+	};
+}
+
+function isInUse(name: string): boolean {
+	for (const prefix of inUsePrefixes) {
+		if (name.startsWith(prefix)) return true;
+	}
+	return false;
+}
+
+/**
  * Reclaim snatch's temp files.
  *
  * The files are normally deleted by whichever path created them: probe metadata
@@ -57,7 +84,8 @@ async function remove(file: string): Promise<boolean> {
  *    Files touched within `graceMs` are spared: yt-dlp rewrites the `.part`
  *    file's mtime continuously, so a long transfer survives both passes.
  *
- * Only files carrying `TMP_PREFIX` are considered. Returns how many were removed.
+ * Files registered through `markTmpInUse` are skipped by both passes. Only files
+ * carrying `TMP_PREFIX` are considered. Returns how many were removed.
  */
 export async function cleanupStaleFiles({
 	ttlMs = DEFAULT_TTL_MS,
@@ -75,7 +103,7 @@ export async function cleanupStaleFiles({
 	const files: TmpFile[] = [];
 	await Promise.all(
 		entries
-			.filter((name) => name.startsWith(TMP_PREFIX))
+			.filter((name) => name.startsWith(TMP_PREFIX) && !isInUse(name))
 			.map(async (name) => {
 				const file = path.join(dir, name);
 				try {
