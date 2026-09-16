@@ -5,6 +5,8 @@ services:
       dockerfile: packages/api/Dockerfile
       args:
         VITE_SENTRY_DSN: ${VITE_SENTRY_DSN:-}
+        VITE_SITE_URL: ${VITE_SITE_URL:-}
+        VITE_CLARITY_ID: ${VITE_CLARITY_ID:-}
     container_name: snatch
     restart: unless-stopped
     ports:
@@ -13,11 +15,16 @@ services:
       - PORT=3001
       - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-}
       - API_KEY=${API_KEY:-}
+      - API_IP_HEADER=${API_IP_HEADER:-}
       - PROXY_SIGNING_KEY=${PROXY_SIGNING_KEY:-}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - SENTRY_DSN=${SENTRY_DSN:-}
+      - YTDLP_COOKIES_FILE=${YTDLP_COOKIES_FILE:-}
     volumes:
       - ytdlp-cache:/data
+      # Mount the jar itself, not a parent directory: a bind mount of a missing
+      # host file becomes a directory, which the app detects and reports at boot.
+      # - ./cookies.txt:/secrets/cookies.txt:ro
 
 volumes:
   ytdlp-cache:

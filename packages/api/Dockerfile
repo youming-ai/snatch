@@ -18,9 +18,14 @@ COPY packages/shared ./packages/shared
 COPY packages/api ./packages/api
 COPY packages/web ./packages/web
 
-# Browser telemetry is compiled into the static client only when configured.
+# Browser telemetry, canonical URL and analytics id are compiled into the static
+# client only when configured; every one is optional.
 ARG VITE_SENTRY_DSN
+ARG VITE_SITE_URL
+ARG VITE_CLARITY_ID
 ENV VITE_SENTRY_DSN=$VITE_SENTRY_DSN
+ENV VITE_SITE_URL=$VITE_SITE_URL
+ENV VITE_CLARITY_ID=$VITE_CLARITY_ID
 
 WORKDIR /app/packages/shared
 RUN bun run typecheck

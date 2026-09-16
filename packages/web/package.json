@@ -6,7 +6,6 @@
     "dev": "vite",
     "build": "vite build && rm -rf dist/server",
     "preview": "vite preview",
-    "test": "bun test",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
