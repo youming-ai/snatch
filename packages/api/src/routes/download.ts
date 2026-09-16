@@ -1,22 +1,27 @@
-import { createReadStream } from "node:fs";
+import { createReadStream, type Stats } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { type ResolveResponse, validateUrl } from "@snatch/shared";
 import { type Context, Hono } from "hono";
 import { stream } from "hono/streaming";
+import type { PinoLogger } from "hono-pino";
+import { parseRange } from "../lib/range";
 import { sanitizeFilename, signUrl, verifyUrl } from "../lib/security";
 import {
 	buildChoices,
 	type DownloadEvent,
 	downloadWithProgress,
 	ensureYtDlp,
+	hasFfmpeg,
 	parseVideoInfo,
 	probe,
 	type VideoInfo,
 } from "../lib/ytdlp";
 import { resolveInputSchema } from "../schemas/media";
 
-const downloadRouter = new Hono();
+// Carries the logger slot that app.ts's pinoLogger middleware fills, so a
+// handler can record why it failed instead of only telling the client.
+const downloadRouter = new Hono<{ Variables: { logger: PinoLogger } }>();
 
 interface ProgressParams {
 	url: string;
@@ -121,6 +126,9 @@ downloadRouter.post("/api/resolve", async (c) => {
 		return c.json(response);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "Resolution failed";
+		// The client already sees this message; the log is what lets an operator
+		// tell "the site blocks us" apart from "our engine is broken".
+		c.var.logger?.warn({ err: error, url }, "resolve failed");
 		return c.json(
 			{
 				status: "error",
@@ -174,7 +182,11 @@ downloadRouter.get("/api/download/progress", async (c) => {
 			let infoJsonToUse = infoJsonPath;
 			try {
 				info = parseVideoInfo(await fs.readFile(infoJsonPath, "utf-8"));
-			} catch {
+			} catch (error) {
+				// The signed probe metadata is gone — swept, restarted, or written by
+				// another replica. Re-probing is correct but repeats a full extraction,
+				// so keep a trace of why it was necessary.
+				c.var.logger?.warn({ err: error, url }, "probe metadata unavailable; re-probing");
 				const probed = await probe(ytdlp, url, c.req.raw.signal);
 				info = probed.info;
 				infoJsonToUse = probed.infoJsonPath;
@@ -183,6 +195,7 @@ downloadRouter.get("/api/download/progress", async (c) => {
 			const choices = buildChoices(info);
 			const selectedChoice = choices.find((ch) => ch.id === choiceId);
 			if (!selectedChoice) {
+				c.var.logger?.warn({ choiceId, url }, "requested format is no longer available");
 				send("failed", { message: "Requested format is no longer available" });
 				return;
 			}
@@ -216,6 +229,7 @@ downloadRouter.get("/api/download/progress", async (c) => {
 			}
 
 			if (!result.value) {
+				c.var.logger?.warn({ url }, "download finished without a file path");
 				send("failed", { message: "Download completed without producing a file path." });
 				return;
 			}
@@ -228,7 +242,7 @@ downloadRouter.get("/api/download/progress", async (c) => {
 			send("ready", {
 				downloadUrl: generateFileUrl(filePath, origin, c),
 				filename,
-				contentType: contentTypeFor(selectedChoice.kind, selectedChoice.ext),
+				contentType: contentTypeFor(selectedChoice.kind),
 			});
 
 			// The file is deleted only after the browser has fetched and the
@@ -238,6 +252,13 @@ downloadRouter.get("/api/download/progress", async (c) => {
 			void fs.rm(infoJsonToUse, { force: true }).catch(() => {});
 		} catch (error) {
 			const msg = error instanceof Error ? error.message : "Download failed";
+			// A caller that closed the tab aborts the child deliberately; that is a
+			// normal outcome, not an error worth paging anyone over.
+			if (c.req.raw.signal.aborted) {
+				c.var.logger?.info({ url }, "download cancelled by client");
+			} else {
+				c.var.logger?.error({ err: error, url }, "download failed");
+			}
 			send("failed", { message: msg });
 		}
 	});
@@ -260,34 +281,82 @@ downloadRouter.get("/api/download", async (c) => {
 		return c.json({ success: false, error: "Invalid download signature" }, 403);
 	}
 
+	// Only the stat can fail for a legitimate reason (the file was swept or the
+	// process restarted), so it owns the 404; everything below it is response
+	// construction, which must not be answered with a JSON body under a media
+	// status.
+	let stat: Stats;
 	try {
-		const stat = await fs.stat(filePath);
-		const ext = path.extname(filePath).slice(1);
-		const filename = sanitizeFilename(path.basename(filePath) || "download.mp4");
-
-		c.header("Content-Type", contentTypeFor(ext === "mp3" ? "audio" : "video", ext));
-		c.header("Content-Disposition", `attachment; filename="${filename}"`);
-		c.header("Content-Length", String(stat.size));
-
-		const readStream = createReadStream(filePath);
-		return stream(c, async (s) => {
-			try {
-				for await (const chunk of readStream) {
-					await s.write(chunk as Uint8Array);
-				}
-			} finally {
-				await fs.rm(filePath, { force: true }).catch(() => {});
-				await fs.rm(`${filePath}.part`, { force: true }).catch(() => {});
-				await fs.rm(`${filePath}.ytdl`, { force: true }).catch(() => {});
-			}
-		});
+		stat = await fs.stat(filePath);
 	} catch (error) {
 		const msg = error instanceof Error ? error.message : "File not found";
+		c.var.logger?.warn({ err: error, file: filePath }, "prepared file unavailable");
 		return c.json({ success: false, error: msg }, 404);
 	}
+
+	const filename = sanitizeFilename(path.basename(filePath) || "download.mp4");
+	const range = parseRange(c.req.header("range"), stat.size);
+
+	if (range === "unsatisfiable") {
+		c.header("Content-Range", `bytes */${stat.size}`);
+		return c.json({ success: false, error: "Requested range not satisfiable" }, 416);
+	}
+
+	const start = range?.start ?? 0;
+	const end = range?.end ?? stat.size - 1;
+	const length = Math.max(0, end - start + 1);
+	// Only a request that reaches EOF leaves nothing behind for a resume.
+	const reachesEof = end === stat.size - 1;
+
+	c.header("Accept-Ranges", "bytes");
+	c.header("Content-Type", contentTypeFor(path.extname(filePath) === ".mp3" ? "audio" : "video"));
+	c.header("Content-Disposition", contentDisposition(filename));
+	c.header("Content-Length", String(length));
+	// Per-user media behind a one-shot signed URL: nothing in between should
+	// hold a copy.
+	c.header("Cache-Control", "no-store");
+	if (range) {
+		c.status(206);
+		c.header("Content-Range", `bytes ${start}-${end}/${stat.size}`);
+	}
+
+	const readStream = createReadStream(filePath, { start, end });
+	return stream(c, async (s) => {
+		try {
+			for await (const chunk of readStream) {
+				// Once the client is gone, keep reading the file for nobody.
+				if (s.aborted) break;
+				await s.write(chunk as Uint8Array);
+			}
+		} finally {
+			readStream.destroy();
+			// Delete once the file has been delivered to EOF. A transfer the
+			// client abandoned keeps it, so the browser can resume it through
+			// the Range the signature already covers; the temp sweeper is what
+			// ultimately reclaims that case.
+			if (reachesEof && !s.aborted) await removePreparedFile(filePath);
+		}
+	});
 });
 
-function contentTypeFor(kind: "video" | "audio", _ext: string): string {
+/** Drop the served media plus the partial artifacts yt-dlp may have left. */
+function removePreparedFile(filePath: string): Promise<unknown> {
+	return Promise.allSettled(
+		[filePath, `${filePath}.part`, `${filePath}.ytdl`].map((file) => fs.rm(file, { force: true })),
+	);
+}
+
+/**
+ * RFC 6266 Content-Disposition: an ASCII fallback for old clients plus the real
+ * UTF-8 name, which would otherwise mojibake a non-Latin title.
+ */
+function contentDisposition(filename: string): string {
+	const ascii = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "");
+	return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+/** The engine produces mp4 for video and mp3 for audio, and nothing else. */
+function contentTypeFor(kind: "video" | "audio"): string {
 	return kind === "audio" ? "audio/mpeg" : "video/mp4";
 }
 
@@ -295,10 +364,14 @@ function contentTypeFor(kind: "video" | "audio", _ext: string): string {
  * GET /api/info
  * Query engine status.
  */
-downloadRouter.get("/api/info", (c) => {
+downloadRouter.get("/api/info", async (c) => {
 	return c.json({
 		engine: "yt-dlp",
 		status: "ok",
+		// Most sites publish video and audio separately, so a host without ffmpeg
+		// cannot finish the merge. Surfacing it here makes that diagnosable
+		// without digging through failed downloads.
+		ffmpeg: await hasFfmpeg(),
 	});
 });
 

@@ -1,16 +1,26 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn } from "node:child_process";
-import { createWriteStream } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { createWriteStream, statSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import { TMP_PREFIX } from "./tmp-cleanup";
+
 const SNATCH_DIR = process.env.YTDLP_DIR || path.join(os.homedir(), ".snatch", "bin");
 const RELEASE_BASE = "https://github.com/yt-dlp/yt-dlp/releases/latest/download";
 
-const INFO_JSON_PREFIX = "snatch-info-"; // ponytail: stale probe jsons rely on explicit rm after download + OS tmp cleanup; no background sweep
+// Shares the sweeper's prefix so probe metadata is always coverable by
+// `cleanupStaleFiles`, even if the request that wrote it never cleans up.
+const INFO_JSON_PREFIX = `${TMP_PREFIX}info-`;
+
+/** Distinguishes concurrent writes that land inside the same millisecond. */
+function uniqueSuffix(): string {
+	return randomUUID().slice(0, 8);
+}
 
 function ytDlpAssetName(): string {
 	if (process.platform === "win32") return "yt-dlp.exe";
@@ -31,9 +41,78 @@ function commandWorks(cmd: string, args: string[]): Promise<boolean> {
 	return promise;
 }
 
+let ffmpegCheck: Promise<boolean> | null = null;
+
+/**
+ * Whether `ffmpeg` is runnable, checked once per process.
+ *
+ * Every format this app offers is built from separate video and audio streams on
+ * most sites, so ffmpeg is what performs the merge (and the mp3 extraction).
+ * Without it yt-dlp still exits 0 and prints the path it meant to write, which is
+ * why the absence has to be detected here rather than inferred from the exit code.
+ */
+export function hasFfmpeg(): Promise<boolean> {
+	ffmpegCheck ??= commandWorks("ffmpeg", ["-version"]);
+	return ffmpegCheck;
+}
+
+/**
+ * The cookie jar to hand yt-dlp, or `null` when there is none to use.
+ *
+ * Many sites refuse a datacenter IP outright — YouTube answers a cloud host with
+ * "Sign in to confirm you're not a bot" — and the supported workaround is a
+ * cookie jar exported from a logged-in browser. The path comes from
+ * `YTDLP_COOKIES_FILE`. Re-checked per spawn rather than cached, so a jar dropped
+ * in later takes effect without a restart.
+ *
+ * A directory is rejected on purpose: that is what a Docker bind mount of a
+ * missing host file looks like, and passing it to `--cookies` would fail every
+ * download instead of just the ones that need a login.
+ */
+export function usableCookiesFile(): string | null {
+	const configured = process.env.YTDLP_COOKIES_FILE?.trim();
+	if (!configured) return null;
+	try {
+		return statSync(configured).isFile() ? configured : null;
+	} catch {
+		return null;
+	}
+}
+
+/** `--cookies <file>`, or nothing when no usable jar is configured. */
+export function cookiesArgs(): string[] {
+	const jar = usableCookiesFile();
+	return jar ? ["--cookies", jar] : [];
+}
+
+/**
+ * yt-dlp prints the path it *intended* to produce, and a post-processing step
+ * that could not run — a merge needing a missing ffmpeg, most often — leaves the
+ * exit code at 0 with nothing on disk. Signing a URL for that path hands the
+ * browser a 404 it cannot explain, so prove the file exists first.
+ */
+async function confirmProducedFile(filePath: string): Promise<void> {
+	try {
+		await fs.stat(filePath);
+		return;
+	} catch {
+		const hint = (await hasFfmpeg())
+			? ""
+			: " This host has no ffmpeg, which is required to merge video and audio.";
+		throw new Error(`The download finished but no file was produced.${hint}`);
+	}
+}
+
+/** The in-flight provisioning attempt, shared by every concurrent caller. */
+let provisioning: Promise<string> | null = null;
+
 /**
  * Resolve a usable yt-dlp binary: system install first, then cached download,
- * then fetch standalone binary from GitHub releases.
+ * then fetch the standalone binary from GitHub releases.
+ *
+ * The release is deliberately unpinned: yt-dlp ships extractor fixes constantly
+ * and a pinned build rots as sites change. Operators who want a fixed binary put
+ * it on `PATH` or in `YTDLP_DIR`, both of which are preferred over downloading.
  */
 export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
 	if (await commandWorks("yt-dlp", ["--version"])) return "yt-dlp";
@@ -41,6 +120,16 @@ export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
 	const local = path.join(SNATCH_DIR, process.platform === "win32" ? "yt-dlp.exe" : "yt-dlp");
 	if (await commandWorks(local, ["--version"])) return local;
 
+	// One provision at a time. Concurrent callers await the same attempt instead
+	// of racing to write the same temp file, and a failure clears the slot so a
+	// later request can retry rather than inheriting the first one's bad luck.
+	provisioning ??= provisionYtDlp(local, signal).finally(() => {
+		provisioning = null;
+	});
+	return provisioning;
+}
+
+async function provisionYtDlp(local: string, signal?: AbortSignal): Promise<string> {
 	await fs.mkdir(SNATCH_DIR, { recursive: true });
 
 	const url = `${RELEASE_BASE}/${ytDlpAssetName()}`;
@@ -49,6 +138,8 @@ export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
 		throw new Error(`Could not download yt-dlp (${response.status}). Check network connection.`);
 	}
 
+	// A fixed temp name is safe under the mutex above, and a transfer killed
+	// mid-flight is overwritten by the next attempt instead of piling up.
 	const tmp = `${local}.download`;
 	await pipeline(
 		Readable.fromWeb(response.body as ReadableStream<Uint8Array>),
@@ -56,6 +147,15 @@ export async function ensureYtDlp(signal?: AbortSignal): Promise<string> {
 		{ signal },
 	);
 	await fs.chmod(tmp, 0o755);
+
+	// Prove the binary runs before it is published at `local`: a truncated or
+	// garbage transfer must never become the cached engine for every later
+	// request, which is the failure the cache would otherwise make permanent.
+	if (!(await commandWorks(tmp, ["--version"]))) {
+		await fs.rm(tmp, { force: true });
+		throw new Error("Downloaded yt-dlp binary failed to run; refusing to cache it.");
+	}
+
 	await fs.rename(tmp, local);
 	return local;
 }
@@ -139,22 +239,39 @@ function formatBytes(bytes: number): string {
 	return `${(bytes / k ** i).toFixed(1)} ${sizes[i]}`;
 }
 
+/** A probe that has not answered in this long is stuck, not slow. */
+const PROBE_TIMEOUT_MS = 60_000;
+/** Ceiling on a metadata dump, so an unexpected extractor cannot exhaust memory. */
+const MAX_INFO_BYTES = 16 * 1024 * 1024;
+
 export async function probe(
 	ytdlp: string,
 	url: string,
 	signal?: AbortSignal,
 ): Promise<ProbeResult> {
+	const timeout = AbortSignal.timeout(PROBE_TIMEOUT_MS);
 	const { promise, resolve, reject } = Promise.withResolvers<string>();
-	const child = spawn(ytdlp, ["-J", "--no-playlist", "--no-warnings", url], { signal });
+	const child = spawn(ytdlp, ["-J", "--no-playlist", "--no-warnings", ...cookiesArgs(), url], {
+		signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+	});
 	let out = "";
 	let stderr = "";
 	child.stdout.on("data", (chunk) => {
 		out += chunk;
+		if (out.length > MAX_INFO_BYTES) {
+			child.kill("SIGKILL");
+			reject(new Error("yt-dlp returned more metadata than expected."));
+		}
 	});
 	child.stderr.on("data", (chunk) => {
 		stderr += chunk;
 	});
-	child.on("error", reject);
+	child.on("error", (error) => {
+		// The abort may have come from our own deadline rather than the client.
+		reject(
+			timeout.aborted ? new Error(`yt-dlp timed out after ${PROBE_TIMEOUT_MS / 1000}s.`) : error,
+		);
+	});
 	child.on("close", (code) => {
 		if (code !== 0) {
 			reject(new Error(cleanYtDlpError(stderr) || `yt-dlp probe failed (exit code ${code})`));
@@ -168,7 +285,7 @@ export async function probe(
 
 	const infoJsonPath = path.join(
 		os.tmpdir(),
-		`${INFO_JSON_PREFIX}${process.pid}-${Date.now()}.json`,
+		`${INFO_JSON_PREFIX}${process.pid}-${Date.now()}-${uniqueSuffix()}.json`,
 	);
 	await fs.writeFile(infoJsonPath, stdout);
 	return { info, infoJsonPath };
@@ -249,6 +366,8 @@ interface ExecuteDownloadOptions {
 	url: string;
 	infoJsonPath?: string;
 	args: string[];
+	/** Overridable so a test need not sit out the real stall window. */
+	idleTimeoutMs?: number;
 }
 
 export type DownloadProgressEvent = {
@@ -271,6 +390,17 @@ const PROGRESS_PREFIX = "YOINK|";
 const PROGRESS_TEMPLATE = `${PROGRESS_PREFIX}%(progress.downloaded_bytes)s|%(progress.total_bytes)s|%(progress.total_bytes_estimate)s|%(progress.speed)s|%(progress.eta)s`;
 
 /**
+ * Silence for this long means the transfer has stalled.
+ *
+ * A stall is the failure worth catching: yt-dlp prints progress continuously
+ * while it works, so a dead connection would otherwise hold a child, its part
+ * file, and the client's socket open indefinitely. A slow-but-live transfer
+ * keeps printing and is never cut off — which is why there is deliberately no
+ * total-duration cap on a download.
+ */
+const DOWNLOAD_IDLE_TIMEOUT_MS = 120_000;
+
+/**
  * Stream yt-dlp download events and return the final file path. Mirrors yoinks'
  * progress parsing: live bytes/speed/ETA while downloading, processing events
  * during merge/audio extraction, and the resolved filepath once complete.
@@ -280,9 +410,15 @@ export async function* downloadWithProgress(
 	signal?: AbortSignal,
 ): AsyncGenerator<DownloadEvent, { filePath: string; cleanup: () => Promise<void> }> {
 	const outDir = os.tmpdir();
-	const outPattern = path.join(outDir, `snatch-${Date.now()}-%(title).60s.%(ext)s`);
+	// The suffix keeps two downloads started in the same millisecond (and with
+	// the same video title) from writing to one file and clobbering each other.
+	const outPattern = path.join(
+		outDir,
+		`${TMP_PREFIX}${Date.now()}-${uniqueSuffix()}-%(title).60s.%(ext)s`,
+	);
 	const args = [
 		...(opts.infoJsonPath ? ["--load-info-json", opts.infoJsonPath] : [opts.url]),
+		...cookiesArgs(),
 		...opts.args,
 		"--no-playlist",
 		"--no-warnings",
@@ -306,11 +442,21 @@ export async function* downloadWithProgress(
 	let stderr = "";
 	let filepath = "";
 	let completed = false;
+	let timedOut = false;
 	let part = 0;
 	let totalParts = 1;
 	let lastDownloaded = 0;
 	let buffer = "";
 	const destinations: string[] = [];
+
+	// Any output resets the stall clock, so only a genuinely silent child is killed.
+	const idleTimeoutMs = opts.idleTimeoutMs ?? DOWNLOAD_IDLE_TIMEOUT_MS;
+	const idleTimer = setTimeout(() => {
+		timedOut = true;
+		child.kill("SIGTERM");
+	}, idleTimeoutMs);
+	idleTimer.unref();
+	const touchIdle = () => idleTimer.refresh();
 
 	const eventQueue: DownloadEvent[] = [];
 	let eventResolver: ((value?: unknown) => void) | undefined;
@@ -322,6 +468,7 @@ export async function* downloadWithProgress(
 	}
 
 	child.stdout.on("data", (chunk: Buffer) => {
+		touchIdle();
 		buffer += chunk.toString();
 		const lines = buffer.split("\n");
 		buffer = lines.pop() ?? "";
@@ -361,27 +508,45 @@ export async function* downloadWithProgress(
 	});
 
 	child.stderr.on("data", (chunk) => {
+		touchIdle();
 		stderr += chunk;
 	});
 
-	child.on("error", reject);
+	child.on("error", (error) => {
+		clearTimeout(idleTimer);
+		reject(error);
+	});
 	child.on("close", (code) => {
+		clearTimeout(idleTimer);
 		if (signal?.aborted) {
 			void removeFiles(destinations);
 			reject(new Error("Download cancelled."));
 			return;
 		}
-		if (code === 0 && filepath) {
-			completed = true;
-			const cleanup = async () => {
-				const filesToRemove = [filepath, ...destinations];
-				await removeFiles(filesToRemove);
-			};
-			resolve({ filePath: filepath, cleanup });
-		} else {
+		if (timedOut) {
 			void removeFiles(destinations);
-			reject(new Error(cleanYtDlpError(stderr) || `Download failed (exit code ${code}).`));
+			reject(new Error(`Download stalled: no output for ${Math.round(idleTimeoutMs / 1000)}s.`));
+			return;
 		}
+		if (code === 0 && filepath) {
+			confirmProducedFile(filepath).then(
+				() => {
+					completed = true;
+					const cleanup = async () => {
+						const filesToRemove = [filepath, ...destinations];
+						await removeFiles(filesToRemove);
+					};
+					resolve({ filePath: filepath, cleanup });
+				},
+				(error) => {
+					void removeFiles(destinations);
+					reject(error);
+				},
+			);
+			return;
+		}
+		void removeFiles(destinations);
+		reject(new Error(cleanYtDlpError(stderr) || `Download failed (exit code ${code}).`));
 	});
 
 	try {
@@ -402,28 +567,13 @@ export async function* downloadWithProgress(
 		}
 		return await promise;
 	} finally {
+		clearTimeout(idleTimer);
 		// only kill+clean if the consumer abandoned the generator early
 		if (!completed && !child.killed) {
 			child.kill("SIGTERM");
 			void removeFiles(destinations);
 		}
 	}
-}
-
-/**
- * Wait for a download to finish without observing progress events.
- */
-export async function executeDownload(
-	opts: ExecuteDownloadOptions,
-	signal?: AbortSignal,
-): Promise<{ filePath: string; cleanup: () => Promise<void> }> {
-	const events = downloadWithProgress(opts, signal);
-	let result = await events.next();
-	while (!result.done) {
-		result = await events.next();
-	}
-	if (!result.value) throw new Error("Download completed without producing a file path.");
-	return result.value;
 }
 
 function toNumber(value: string | undefined): number | undefined {
