@@ -8,10 +8,23 @@ Social media video downloader — Bun monorepo: a React + TanStack Start SPA ser
 
 Snatch is a thin shell around `yt-dlp`, so it accepts a link from any of the
 ~1,800 sites yt-dlp supports. There is no host allowlist; the engine decides
-what it can actually extract, and some sites need cookies or fail behind
-anti-bot measures. The SPA highlights the popular ones (YouTube, X/Twitter,
-Instagram, Threads, TikTok, Vimeo, Twitch, Reddit, Facebook) from `SERVICES` in
-`packages/shared/src/constants.ts`.
+what it can actually extract. The SPA highlights the popular ones (YouTube,
+X/Twitter, Instagram, Threads, TikTok, Vimeo, Twitch, Reddit, Facebook) from
+`SERVICES` in `packages/shared/src/constants.ts` — that grid is a list of what
+people paste, **not** a compatibility guarantee.
+
+Snatch runs yt-dlp with no cookie or credential flags unless the operator
+provides a jar, by design: the server holds no account session of its own. Many
+sites gate their player behind a login — Vimeo's web client and, from a
+datacenter IP, YouTube — and answer with a request for `--cookies`. Export a
+Netscape-format `cookies.txt` from a logged-in browser, mount it into the
+container, and set `YTDLP_COOKIES_FILE`; without it those sites fail with the
+engine's own message, and the boot log says which path it looked for.
+
+`ffmpeg` on `PATH` is a hard requirement in practice, not a nicety: most sites
+publish video and audio as separate streams, so the merge is what produces the
+file. Without it a download fails with "no file was produced" rather than
+silently delivering nothing. Check what the server sees at `GET /api/info`.
 
 Private, loopback, link-local and single-label hosts are refused at the request
 boundary — see `validateUrl()` in `packages/shared/src/validation.ts`.
@@ -68,11 +81,14 @@ bun dev
 ### Testing
 
 ```bash
-bun test                 # all packages
+bun test                 # all packages (bunfig root=".")
+bun run test             # same, fanned out per package
 bun run test:api         # API only
-bun run test:web         # web only
 bun run test:shared      # shared only
 ```
+
+The SPA has no unit tests — it is exercised in the browser — so `@snatch/web`
+has no `test` script and the fan-out skips it.
 
 ### Type Checking
 
@@ -116,6 +132,25 @@ same-origin by the API.
 | GET | `/api/download` | Deliver the prepared file after the progress endpoint signals it is ready |
 | GET | `/api/info` | Query engine status |
 | GET | `/health` | Health check |
+
+### Behavior notes
+
+- **Download links are signed and one-shot.** Every `/api/download/progress` and
+  `/api/download` URL carries an HMAC over its parameters; without
+  `PROXY_SIGNING_KEY` set, that key is random per process, so links stop working
+  when the container restarts.
+- **The file is deleted after delivery.** `/api/download` streams the media and
+  removes it once the client has read it to the end, so a link is good for one
+  download. A transfer the client abandons is kept so the browser can resume it,
+  and anything left behind is reclaimed by a background sweep of the temp
+  directory (untouched for 2 hours, or above a 4 GB cap).
+- **Resume works.** `/api/download` honours a single `Range` request with `206`,
+  and answers an impossible range with `416`.
+- **Rate limiting is per process and in memory.** It keys on `cf-connecting-ip` /
+  `fly-client-ip`, or on `API_IP_HEADER` if you set it. Behind any other reverse
+  proxy, set that variable to the header your proxy overwrites with the caller's
+  address (for Nginx, `x-real-ip`) — otherwise every caller sharing a browser
+  version shares one bucket.
 
 ## Contributing
 

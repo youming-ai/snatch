@@ -39,8 +39,12 @@ describe("API Routes", () => {
 		it("should return yt-dlp engine metadata", async () => {
 			const res = await app.fetch(new Request("http://localhost:3001/api/info"));
 			expect(res.status).toBe(200);
-			const data = (await res.json()) as { engine: string };
+			const data = (await res.json()) as { engine: string; status: string; ffmpeg: unknown };
 			expect(data.engine).toBe("yt-dlp");
+			expect(data.status).toBe("ok");
+			// Whether the host has it is environmental; the field being present and
+			// boolean is the contract that makes the failure diagnosable.
+			expect(typeof data.ffmpeg).toBe("boolean");
 		});
 	});
 

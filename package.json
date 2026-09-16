@@ -16,7 +16,6 @@
 		"test": "bun --filter '*' test",
 		"test:shared": "bun --filter '@snatch/shared' test",
 		"test:api": "bun --filter '@snatch/api' test",
-		"test:web": "bun --filter '@snatch/web' test",
 		"typecheck": "bun --filter '*' typecheck",
 		"lint": "biome check .",
 		"lint:fix": "biome check --fix .",
