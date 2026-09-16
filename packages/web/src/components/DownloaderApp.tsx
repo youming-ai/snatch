@@ -1,6 +1,6 @@
 import { type MediaChoiceItem, type ResolveResponse, SERVICES, validateUrl } from "@snatch/shared";
 import { CheckCircle, Download, Loader2, Settings, X, XCircle } from "lucide-react";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE_URL } from "../config";
 import { Sentry } from "../lib/sentry";
 import { DownloaderInput } from "./DownloaderInput";
@@ -8,6 +8,14 @@ import { DownloaderInput } from "./DownloaderInput";
 type SettingsState = { apiKey: string };
 
 const DEFAULT_SETTINGS: SettingsState = { apiKey: "" };
+
+/**
+ * A failure the API reported on purpose: a rejected URL, media the engine
+ * cannot extract, a spent rate limit, a bad API key. Those are expected
+ * outcomes rather than bugs, so they stay out of Sentry — only transport and
+ * protocol failures are worth reporting.
+ */
+class ApiError extends Error {}
 
 type PickerResponse = ResolveResponse;
 
@@ -83,6 +91,23 @@ export function DownloaderApp() {
 	const [pickerResponse, setPickerResponse] = useState<PickerResponse | null>(null);
 	const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
 
+	// The SSE stream outlives React state: closing it is what stops the
+	// server-side yt-dlp child behind it, so the handle lives in a ref that
+	// every reset path (cancel, new download, unmount) can reach.
+	const activeSourceRef = useRef<EventSource | null>(null);
+
+	const closeStream = useCallback(() => {
+		activeSourceRef.current?.close();
+		activeSourceRef.current = null;
+	}, []);
+
+	useEffect(() => {
+		return () => {
+			activeSourceRef.current?.close();
+			activeSourceRef.current = null;
+		};
+	}, []);
+
 	// Sync settings to localStorage
 	const handleSettingsChange = (nextSettings: SettingsState) => {
 		setSettings(nextSettings);
@@ -94,6 +119,7 @@ export function DownloaderApp() {
 	};
 
 	const handleInputValueChange = () => {
+		closeStream();
 		if (error) setError(null);
 		if (downloadPhase.status !== "idle") setDownloadPhase({ status: "idle" });
 		if (pickerResponse) setPickerResponse(null);
@@ -113,7 +139,12 @@ export function DownloaderApp() {
 		(item: MediaChoiceItem) => {
 			setDownloadPhase({ status: "downloading", item, processing: false });
 
+			// Never leave an earlier stream running: each one owns a server-side
+			// yt-dlp child and a temp file that only closing it will stop.
+			closeStream();
+
 			const source = new EventSource(`${API_BASE_URL}${item.url}`);
+			activeSourceRef.current = source;
 
 			source.addEventListener("progress", (event) => {
 				try {
@@ -122,7 +153,8 @@ export function DownloaderApp() {
 						prev.status === "downloading" ? { ...prev, progress: data, processing: false } : prev,
 					);
 				} catch {
-					// ignore malformed progress event
+					// A malformed progress frame is not worth failing the download
+					// over; the next one supersedes it.
 				}
 			});
 
@@ -133,7 +165,7 @@ export function DownloaderApp() {
 			});
 
 			source.addEventListener("ready", (event) => {
-				source.close();
+				closeStream();
 				try {
 					const data = JSON.parse(event.data) as {
 						downloadUrl: string;
@@ -142,23 +174,26 @@ export function DownloaderApp() {
 					};
 					triggerFileDownload(data.downloadUrl, data.filename);
 					setDownloadPhase({ status: "done", filename: data.filename });
-				} catch {
+				} catch (error) {
+					// The server sent an event we cannot read: client/server drift.
+					Sentry.captureException(error);
 					setDownloadPhase({ status: "error", message: "Download ready event was malformed." });
 				}
 			});
 
 			source.addEventListener("failed", (event) => {
-				source.close();
+				closeStream();
 				try {
 					const data = JSON.parse((event as MessageEvent).data ?? "{}") as { message?: string };
 					setDownloadPhase({ status: "error", message: data.message ?? "Download failed." });
-				} catch {
+				} catch (error) {
+					Sentry.captureException(error);
 					setDownloadPhase({ status: "error", message: "Download failed." });
 				}
 			});
 
 			source.onerror = () => {
-				source.close();
+				closeStream();
 				setDownloadPhase((prev) =>
 					prev.status === "downloading"
 						? { status: "error", message: "Connection to download progress stream lost." }
@@ -166,7 +201,7 @@ export function DownloaderApp() {
 				);
 			};
 		},
-		[triggerFileDownload],
+		[closeStream, triggerFileDownload],
 	);
 
 	const handleDownload = async (rawUrl: string) => {
@@ -184,6 +219,7 @@ export function DownloaderApp() {
 
 		setLoading(true);
 		setError(null);
+		closeStream();
 		setDownloadPhase({ status: "idle" });
 		setPickerResponse(null);
 		setResolvedUrl(null);
@@ -209,7 +245,10 @@ export function DownloaderApp() {
 
 			if (!response.ok) {
 				const serverError = "success" in data && typeof data.error === "string" ? data.error : null;
-				throw new Error(serverError || `Request failed (${response.status})`);
+				const message = serverError || `Request failed (${response.status})`;
+				// 4xx is a deliberate rejection (bad URL, bad key, rate limit) and
+				// belongs to the user; 5xx means the server broke and belongs in Sentry.
+				throw response.status >= 500 ? new Error(message) : new ApiError(message);
 			}
 
 			if ("success" in data) {
@@ -219,7 +258,7 @@ export function DownloaderApp() {
 			const resolveData = data as ResolveResponse;
 
 			if (resolveData.status === "error") {
-				throw new Error(
+				throw new ApiError(
 					resolveData.error?.message || resolveData.error?.code || "Failed to resolve media",
 				);
 			}
@@ -229,7 +268,7 @@ export function DownloaderApp() {
 				setResolvedUrl(url);
 			}
 		} catch (error) {
-			Sentry.captureException(error);
+			if (!(error instanceof ApiError)) Sentry.captureException(error);
 			setError(
 				error instanceof Error ? error.message : "Failed to resolve content. Please try again.",
 			);
@@ -279,7 +318,7 @@ export function DownloaderApp() {
 						</h1>
 
 						<p className="text-xl text-gray-400 max-w-2xl mx-auto leading-relaxed animate-in fade-in slide-in-from-bottom-8 duration-700 delay-200">
-							Paste a link, get the file. Videos, audio and images from your favorite platforms — no
+							Paste a link, get the file. Video and audio from your favorite platforms — no
 							watermarks, no signup, completely free.
 						</p>
 					</div>
@@ -370,7 +409,10 @@ export function DownloaderApp() {
 								</div>
 								<button
 									type="button"
-									onClick={() => setDownloadPhase({ status: "idle" })}
+									onClick={() => {
+										closeStream();
+										setDownloadPhase({ status: "idle" });
+									}}
 									className="shrink-0 p-1 px-3 bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-semibold rounded-lg transition-colors border border-white/5"
 								>
 									Cancel
@@ -518,17 +560,18 @@ export function DownloaderApp() {
 					{[
 						{
 							title: "Lightning Fast",
-							description: "Optimized extraction ensures downloads start in seconds.",
+							description: "The download starts as soon as the engine has prepared your file.",
 							icon: "⚡",
 						},
 						{
 							title: "Highest Quality",
-							description: "We always fetch the maximum resolution available from the source.",
+							description: "Pick any resolution the source offers, up to the highest available.",
 							icon: "💎",
 						},
 						{
 							title: "100% Free",
-							description: "No hidden fees, no registration, just unlimited downloads.",
+							description:
+								"No signup, no fees, no ads. Fair-use rate limits keep it available for everyone.",
 							icon: "🎁",
 						},
 					].map((feature) => (
